@@ -8,7 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from "@/components/ui/use-toast"
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { uploadImageToBlob, deleteImageFromBlob } from '@/utils/blobStorage';
+import { uploadImageToSupabase } from '@/utils/supabaseStorage'
+import { ChangeEvent } from 'react'
 
 interface FamilyCardProps {
   id: string
@@ -22,30 +23,35 @@ export default function FamilyCard({ id, name, image, onEdit, onDelete }: Family
   const { user } = useAuth()
   const { toast } = useToast()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [currentImage, setCurrentImage] = useState(image)
 
   const handleDelete = () => {
     onDelete(id)
     toast({
       title: "Family Deleted",
-      description: "The family has been successfully deleted.",
-      variant: "destructive",
+      description: "The family has been successfully deleted."
     })
     setIsDeleteDialogOpen(false)
   }
 
-  const handleFamilyImageUpload = async (imageData: string) => {
-    try {
-      const imageUrl = await uploadImageToBlob(imageData);
-      // Update the family image in your state or context
-      // You'll need to implement this part based on your app's structure
-      // For example: updateFamilyImage(id, imageUrl);
-    } catch (error) {
-      console.error('Error uploading family image:', error);
-      toast({
-        title: "Image Upload Failed",
-        description: "Failed to upload family image. Please try again.",
-        variant: "destructive",
-      });
+  const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = async () => {
+        try {
+          const imageData = reader.result as string
+          const imageUrl = await uploadImageToSupabase(imageData);
+          setCurrentImage(imageUrl)
+        } catch (error) {
+          console.error('Error uploading image:', error)
+          toast({
+            title: "Error",
+            description: "Failed to upload image. Please try again.",
+          })
+        }
+      }
+      reader.readAsDataURL(file)
     }
   }
 
@@ -59,7 +65,7 @@ export default function FamilyCard({ id, name, image, onEdit, onDelete }: Family
           <CardContent className="p-0 relative group">
             <div className="relative w-full h-48">
               <Image
-                src={image || '/placeholder.svg'}
+                src={currentImage || '/placeholder.svg'}
                 alt={`${name} family`}
                 fill
                 className="object-cover"
@@ -79,7 +85,7 @@ export default function FamilyCard({ id, name, image, onEdit, onDelete }: Family
             </div>
           </CardContent>
           <CardFooter className="flex justify-between p-4 bg-gradient-to-r from-pink-50 to-purple-50">
-            <Button 
+            <Button
               asChild
               className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg transition-all duration-300"
             >
@@ -88,17 +94,17 @@ export default function FamilyCard({ id, name, image, onEdit, onDelete }: Family
             <div className="flex space-x-2">
               {user?.isAdmin && (
                 <>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => onEdit(id)}
                     className="text-gray-600 hover:text-pink-500 hover:bg-pink-50"
                   >
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setIsDeleteDialogOpen(true)}
                     className="text-gray-600 hover:text-red-500 hover:bg-red-50"
                   >

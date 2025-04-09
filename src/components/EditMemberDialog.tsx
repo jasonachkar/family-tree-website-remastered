@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { FamilyMember } from './FamilyTree'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -13,20 +13,20 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import Image from 'next/image'
 import { ImageIcon, X, Heart } from 'lucide-react'
 import { useToast } from "@/components/ui/use-toast"
-import { uploadImageToBlob, deleteImageFromBlob } from '@/utils/blobStorage';
+import { uploadImageToSupabase, deleteImageFromSupabase } from '@/utils/supabaseStorage'
 
 interface EditMemberDialogProps {
   member: FamilyMember
   isOpen: boolean
   onClose: () => void
   onSave: (editedMember: FamilyMember) => void
-  onDelete: (id: string) => void
+  onDelete: (id: string, isSpouse: boolean) => void
   isEditing: boolean
   addType: 'child' | 'spouse'
   setAddType: (type: 'child' | 'spouse') => void
 }
 
-export default function EditMemberDialog({
+const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
   member,
   isOpen,
   onClose,
@@ -35,7 +35,7 @@ export default function EditMemberDialog({
   isEditing,
   addType,
   setAddType,
-}: EditMemberDialogProps) {
+}) => {
   const [editedMember, setEditedMember] = useState<FamilyMember>({
     ...member,
     firstName: member.firstName || '',
@@ -64,21 +64,21 @@ export default function EditMemberDialog({
     })
   }, [member])
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
     if (file) {
       const reader = new FileReader()
       reader.onloadend = async () => {
         try {
-          const imageUrl = await uploadImageToBlob(reader.result as string);
+          const imageData = reader.result as string
+          const imageUrl = await uploadImageToSupabase(imageData)
           setEditedMember({ ...editedMember, image: imageUrl })
         } catch (error) {
-          console.error('Error uploading image:', error);
+          console.error('Error uploading image:', error)
           toast({
-            title: "Image Upload Failed",
+            title: "Error",
             description: "Failed to upload image. Please try again.",
-            variant: "destructive",
-          });
+          })
         }
       }
       reader.readAsDataURL(file)
@@ -103,45 +103,34 @@ export default function EditMemberDialog({
       const reader = new FileReader()
       reader.onloadend = async () => {
         try {
-          const imageUrl = await uploadImageToBlob(reader.result as string);
+          const imageData = reader.result as string
+          const imageUrl = await uploadImageToSupabase(imageData)
           setEditedMember({ ...editedMember, image: imageUrl })
         } catch (error) {
-          console.error('Error uploading image:', error);
+          console.error('Error uploading image:', error)
           toast({
-            title: "Image Upload Failed",
+            title: "Error",
             description: "Failed to upload image. Please try again.",
-            variant: "destructive",
-          });
+          })
         }
       }
       reader.readAsDataURL(file)
     }
   }
 
-  const handleDelete = () => {
-    onDelete(member.id)
-    toast({
-      title: "Member Deleted",
-      description: "The family member has been successfully removed.",
-      variant: "destructive",
-    })
-    onClose()
-    setIsDeleteDialogOpen(false)
-  }
-
-  const handleImageDelete = async () => {
-    if (editedMember.image) {
-      try {
-        await deleteImageFromBlob(editedMember.image);
-        setEditedMember({ ...editedMember, image: '' });
-      } catch (error) {
-        console.error('Error deleting image:', error);
-        toast({
-          title: "Image Deletion Failed",
-          description: "Failed to delete image. Please try again.",
-          variant: "destructive",
-        });
+  const handleDelete = async () => {
+    try {
+      if (editedMember.image) {
+        await deleteImageFromSupabase(editedMember.image)
       }
+      onDelete(editedMember.id, addType === 'spouse')
+      onClose()
+    } catch (error) {
+      console.error('Error deleting member:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete member. Please try again.",
+      })
     }
   }
 
@@ -240,9 +229,8 @@ export default function EditMemberDialog({
               <div className="space-y-2">
                 <Label className="text-gray-700 font-medium">Image</Label>
                 <div
-                  className={`relative border-2 border-dashed rounded-lg p-6 transition-colors duration-200 ${
-                    isDragging ? 'border-pink-500 bg-pink-50' : 'border-pink-200 hover:border-pink-300'
-                  }`}
+                  className={`relative border-2 border-dashed rounded-lg p-6 transition-colors duration-200 ${isDragging ? 'border-pink-500 bg-pink-50' : 'border-pink-200 hover:border-pink-300'
+                    }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
@@ -250,7 +238,7 @@ export default function EditMemberDialog({
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={handleImageUpload}
+                    onChange={handleImageChange}
                     ref={fileInputRef}
                     className="hidden"
                   />
@@ -268,7 +256,7 @@ export default function EditMemberDialog({
                             variant="ghost"
                             size="icon"
                             className="text-white hover:text-pink-200"
-                            onClick={handleImageDelete}
+                            onClick={handleDelete}
                           >
                             <X className="w-5 h-5" />
                           </Button>
@@ -368,3 +356,5 @@ export default function EditMemberDialog({
     </>
   )
 }
+
+export default EditMemberDialog

@@ -21,7 +21,7 @@ import CombinedSpouseCard from './CombinedSpouseCard';
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import SplashScreen from './SplashScreen'
-import { uploadImageToBlob, deleteImageFromBlob } from '@/utils/blobStorage';
+import { uploadImageToSupabase, deleteImageFromSupabase } from '@/utils/supabaseStorage';
 
 export interface FamilyMember extends Person {
   children?: FamilyMember[]
@@ -29,6 +29,7 @@ export interface FamilyMember extends Person {
   dob?: string
   dod?: string
   image?: string
+  name: string
 }
 
 interface FamilyTreeProps {
@@ -67,6 +68,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
     image: member.image || '',
     role: member.role || '',
     description: member.description || '',
+    name: member.name || '',
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -81,6 +83,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
       image: member.image || '',
       role: member.role || '',
       description: member.description || '',
+      name: member.name || '',
     })
   }, [member])
 
@@ -115,6 +118,32 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
         setEditedMember({ ...editedMember, image: reader.result as string })
       }
       reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSave = async () => {
+    try {
+      const updatedMember = { ...editedMember }
+      if (updatedMember.image && updatedMember.image !== member.image && updatedMember.image.startsWith('data:')) {
+        const imageUrl = await uploadImageToSupabase(updatedMember.image)
+        updatedMember.image = imageUrl
+      }
+      onSave(updatedMember)
+      onClose()
+    } catch (error) {
+      console.error('Error saving member:', error)
+    }
+  }
+
+  const handleDelete = async () => {
+    try {
+      if (member.image && !member.image.startsWith('data:')) {
+        await deleteImageFromSupabase(member.image)
+      }
+      onDelete(member.id, false)
+      onClose()
+    } catch (error) {
+      console.error('Error deleting member:', error)
     }
   }
 
@@ -212,9 +241,8 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
             <div className="space-y-2">
               <Label className="text-gray-700 font-medium">Image</Label>
               <div
-                className={`relative border-2 border-dashed rounded-lg p-6 transition-colors duration-200 ${
-                  isDragging ? 'border-pink-500 bg-pink-50' : 'border-pink-200 hover:border-pink-300'
-                }`}
+                className={`relative border-2 border-dashed rounded-lg p-6 transition-colors duration-200 ${isDragging ? 'border-pink-500 bg-pink-50' : 'border-pink-200 hover:border-pink-300'
+                  }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -318,7 +346,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
               Cancel
             </Button>
             <Button
-              onClick={() => onSave(editedMember)}
+              onClick={handleSave}
               className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white"
             >
               {isEditing ? 'Update' : 'Add'}
@@ -365,7 +393,6 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
         toast({
           title: "Error",
           description: "Failed to load family tree data.",
-          variant: "destructive",
         })
       }
     }
@@ -382,15 +409,27 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
     <motion.g
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
+      transition={{
+        duration: 0.5,
+        ease: [0.4, 0, 0.2, 1]
+      }}
       onClick={() => setSelectedNode(nodeDatum.id)}
+      whileHover={{ scale: 1.02 }}
     >
-      <foreignObject width={200} height={400} x={-100} y={-150}>
-        <motion.div 
-          className={`bg-white bg-opacity-90 border-2 ${selectedNode === nodeDatum.id ? 'border-pink-500' : 'border-pink-300'} rounded-lg p-4 shadow-md hover:shadow-lg transition-shadow duration-300`}
+      <foreignObject width={250} height={400} x={-125} y={-150}>
+        <motion.div
+          className={`relative bg-white/95 backdrop-blur-sm border-2 ${selectedNode === nodeDatum.id
+            ? 'border-pink-500 shadow-lg shadow-pink-200/50'
+            : 'border-pink-300'
+            } rounded-xl p-4 transition-all duration-300 hover:shadow-xl`}
           onDoubleClick={(e) => {
             e.stopPropagation()
             handleDoubleClick(nodeDatum)
+          }}
+          initial={false}
+          animate={{
+            scale: selectedNode === nodeDatum.id ? 1.02 : 1,
+            borderWidth: selectedNode === nodeDatum.id ? '3px' : '2px'
           }}
         >
           <PersonCard
@@ -410,105 +449,82 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
         </motion.div>
       </foreignObject>
       {nodeDatum.spouses && nodeDatum.spouses.length > 0 && (
-        <g transform="translate(300, 0)">
-          <foreignObject width={200} height={400} x={-100} y={-150}>
-            <CombinedSpouseCard
-              spouses={nodeDatum.spouses}
-              isMinor={user?.isMinor || false}
-              onEdit={(spouse) => {
-                setEditingMember(spouse)
-                setIsEditing(true)
-                setIsDialogOpen(true)
-              }}
-              onViewDetails={handleDoubleClick}
-              selectedNode={selectedNode}
-              setSelectedNode={setSelectedNode}
-              onDelete={(spouseId) => handleDeleteMember(spouseId, true)}
-            />
+        <g transform="translate(350, 0)">
+          <foreignObject width={250} height={400} x={-125} y={-150}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <CombinedSpouseCard
+                spouses={nodeDatum.spouses}
+                isMinor={user?.isMinor || false}
+                onEdit={(spouse) => {
+                  setEditingMember(spouse)
+                  setIsEditing(true)
+                  setIsDialogOpen(true)
+                }}
+                onViewDetails={handleDoubleClick}
+                selectedNode={selectedNode}
+                setSelectedNode={setSelectedNode}
+                onDelete={(spouseId) => handleDeleteMember(spouseId, true)}
+              />
+            </motion.div>
           </foreignObject>
-          <path d="M-200,0 L-100,0" stroke="#F472B6" strokeWidth="3" />
+          <motion.path
+            d="M-250,0 L-125,0"
+            stroke="#F472B6"
+            strokeWidth="3"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.5, ease: "easeInOut" }}
+          />
         </g>
       )}
     </motion.g>
   )
 
-  const addOrUpdateMember = async (updatedMember: FamilyMember) => {
+  const handleUpdateMember = async (updatedMember: FamilyMember) => {
     if (updatedMember.image && updatedMember.image.startsWith('data:')) {
       try {
-        const imageUrl = await uploadImageToBlob(updatedMember.image);
+        const imageUrl = await uploadImageToSupabase(updatedMember.image);
         updatedMember.image = imageUrl;
       } catch (error) {
         console.error('Error uploading image:', error);
         toast({
-          title: "Image Upload Failed",
+          title: "Error",
           description: "Failed to upload image. Please try again.",
-          variant: "destructive",
         });
         return;
       }
     }
 
-    const updateTreeNode = (node: FamilyMember): FamilyMember => {
-      if (node.id === updatedMember.id) {
-        return { ...node, ...updatedMember }
-      }
-      if (node.spouses?.some(spouse => spouse.id === updatedMember.id)) {
-        return {
-          ...node,
-          spouses: node.spouses.map(spouse =>
-            spouse.id === updatedMember.id ? { ...spouse, ...updatedMember } : spouse
-          )
-        }
-      }
-      return {
-        ...node,
-        children: node.children?.map(updateTreeNode),
-        spouses: node.spouses?.map(updateTreeNode)
+    setTreeData(updateNodeInTree(treeData, updatedMember));
+    onUpdate(treeData);
+  };
+
+  const handleDeleteMember = async (memberId: string, isSpouse: boolean) => {
+    const memberToDelete = findNodeInTree(treeData, memberId);
+    if (memberToDelete && memberToDelete.image) {
+      try {
+        await deleteImageFromSupabase(memberToDelete.image);
+      } catch (error) {
+        console.error('Error deleting image:', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete image. Please try again.",
+        });
       }
     }
 
-    if (isEditing) {
-      const updatedTree = updateTreeNode(treeData)
-      setTreeData(updatedTree)
-      setHasUnsavedChanges(true)
-    } else if (selectedNode) {
-      const newPerson: FamilyMember = {
-        ...updatedMember,
-        id: Date.now().toString(),
-        familyId: treeData.familyId,
-      }
+    const updatedTree = isSpouse
+      ? removeSpouseFromTree(treeData, memberId)
+      : removeNodeFromTree(treeData, memberId);
 
-      const updatedTree = updateTreeNode(treeData)
-      const updateSelectedNode = (node: FamilyMember): FamilyMember => {
-        if (node.id === selectedNode) {
-          if (addType === 'spouse') {
-            return {
-              ...node,
-              spouses: [...(node.spouses || []), newPerson]
-            }
-          } else {
-            return {
-              ...node,
-              children: [...(node.children || []), newPerson],
-            }
-          }
-        }
-        return {
-          ...node,
-          children: node.children?.map(updateSelectedNode),
-          spouses: node.spouses?.map(updateSelectedNode)
-        }
-      }
-
-      const finalUpdatedTree = updateSelectedNode(updatedTree)
-      setTreeData(finalUpdatedTree)
-      setHasUnsavedChanges(true)
-    }
-
-    setIsEditing(false)
-    setIsDialogOpen(false)
-    setEditingMember(null)
-  }
+    setTreeData(updatedTree);
+    onUpdate(updatedTree);
+    setSelectedNode(null);
+  };
 
   const saveChanges = async () => {
     try {
@@ -535,7 +551,6 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
       toast({
         title: "Error",
         description: "Failed to save changes. Please try again.",
-        variant: "destructive",
       })
     }
   }
@@ -555,56 +570,78 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
     return undefined;
   };
 
-  const handleDeleteMember = async (memberId: string, isSpouse: boolean = false) => {
-    const memberToDelete = findMemberById(treeData, memberId);
-    if (memberToDelete && memberToDelete.image) {
-      try {
-        await deleteImageFromBlob(memberToDelete.image);
-      } catch (error) {
-        console.error('Error deleting image:', error);
-        toast({
-          title: "Image Deletion Failed",
-          description: "Failed to delete image. Please try again.",
-          variant: "destructive",
-        });
-      }
+  const findNodeInTree = (node: FamilyMember, id: string): FamilyMember | undefined => {
+    if (node.id === id) {
+      return node;
     }
-
-    setMemberToDelete({ id: memberId, isSpouse });
-    setIsDeleteDialogOpen(true);
+    if (node.children) {
+      const child = node.children.find(child => child.id === id);
+      if (child) return child;
+    }
+    if (node.spouses) {
+      const spouse = node.spouses.find(spouse => spouse.id === id);
+      if (spouse) return spouse;
+    }
+    return undefined;
   };
 
-  const confirmDelete = () => {
-    if (memberToDelete) {
-      const deleteNodeFromTree = (node: FamilyMember): FamilyMember | null => {
-        if (node.id === memberToDelete.id && !memberToDelete.isSpouse) {
-          return null;
-        }
-        if (node.spouses) {
-          node.spouses = node.spouses.filter(spouse => spouse.id !== memberToDelete.id);
-        }
-        if (node.children) {
-          node.children = node.children
-            .map(child => deleteNodeFromTree(child))
-            .filter((child): child is FamilyMember => child !== null);
-        }
-        return node;
-      };
-
-      const updatedTree = deleteNodeFromTree({ ...treeData });
-      if (updatedTree) {
-        setTreeData(updatedTree);
-        setHasUnsavedChanges(true);
-        setIsDialogOpen(false);
-        toast({
-          title: "Member Deleted",
-          description: memberToDelete.isSpouse ? "The spouse has been removed from the family tree." : "The family member has been removed from the tree.",
-          duration: 3000,
-        });
-      }
+  const updateNodeInTree = (node: FamilyMember, updatedMember: FamilyMember): FamilyMember => {
+    if (node.id === updatedMember.id) {
+      return { ...node, ...updatedMember };
     }
-    setIsDeleteDialogOpen(false);
-    setMemberToDelete(null);
+    if (node.spouses?.some(spouse => spouse.id === updatedMember.id)) {
+      return {
+        ...node,
+        spouses: node.spouses.map(spouse =>
+          spouse.id === updatedMember.id ? { ...spouse, ...updatedMember } : spouse
+        )
+      };
+    }
+    return {
+      ...node,
+      children: node.children?.map(child => updateNodeInTree(child, updatedMember)),
+      spouses: node.spouses?.map(spouse => updateNodeInTree(spouse, updatedMember))
+    };
+  };
+
+  const removeSpouseFromTree = (node: FamilyMember, spouseId: string): FamilyMember => {
+    if (node.spouses) {
+      const updatedSpouses = node.spouses.filter(spouse => spouse.id !== spouseId);
+      return {
+        ...node,
+        spouses: updatedSpouses
+      };
+    }
+    return node;
+  };
+
+  const removeNodeFromTree = (node: FamilyMember, id: string): FamilyMember => {
+    if (node.id === id) {
+      return {
+        id: '',
+        firstName: '',
+        lastName: '',
+        familyId: node.familyId,
+        x: 0,
+        y: 0,
+        name: ''
+      };
+    }
+    if (node.children) {
+      const updatedChildren = node.children.map(child => removeNodeFromTree(child, id)).filter((child): child is FamilyMember => child !== null);
+      return {
+        ...node,
+        children: updatedChildren
+      };
+    }
+    if (node.spouses) {
+      const updatedSpouses = node.spouses.map(spouse => removeNodeFromTree(spouse, id)).filter((spouse): spouse is FamilyMember => spouse !== null);
+      return {
+        ...node,
+        spouses: updatedSpouses
+      };
+    }
+    return node;
   };
 
   return (
@@ -619,7 +656,7 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
         <div className="flex justify-between items-center mb-4 p-4 bg-white bg-opacity-80">
           <div className="flex gap-4">
             {user?.isAdmin && (
-              <Button 
+              <Button
                 onClick={() => {
                   setEditingMember({
                     id: '',
@@ -633,21 +670,22 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
                     image: '',
                     role: '',
                     description: '',
+                    name: ''
                   })
                   setIsEditing(false)
                   setIsDialogOpen(true)
-                }} 
+                }}
                 className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg transition-all duration-300"
               >
                 Add Family Member
               </Button>
             )}
-            <Button 
-              onClick={saveChanges} 
+            <Button
+              onClick={saveChanges}
               disabled={!hasUnsavedChanges}
               variant={hasUnsavedChanges ? "default" : "outline"}
-              className={hasUnsavedChanges 
-                ? "bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg transition-all duration-300" 
+              className={hasUnsavedChanges
+                ? "bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg transition-all duration-300"
                 : "bg-white/50 text-pink-500 hover:bg-pink-50 border-pink-200"}
             >
               {hasUnsavedChanges ? "Save Changes" : "No Changes"}
@@ -668,10 +706,11 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
             image: '',
             role: '',
             description: '',
+            name: ''
           }}
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
-          onSave={addOrUpdateMember}
+          onSave={handleUpdateMember}
           onDelete={handleDeleteMember}
           isEditing={isEditing}
           addType={addType}
@@ -684,19 +723,22 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
           onClose={() => setDetailedPersonOpen(false)}
         />
 
-        <div className="h-[calc(100vh-100px)] relative border-2 border-pink-200 rounded-lg">
+        <div className="h-[calc(100vh-100px)] relative border-2 border-pink-200 rounded-xl overflow-hidden bg-gradient-to-br from-pink-50/50 to-purple-50/50">
           <Tree
             data={treeData}
-            renderCustomNodeElement={(rd3tProps) => renderNodeContent({ ...rd3tProps, nodeDatum: rd3tProps.nodeDatum as FamilyMember })}
+            renderCustomNodeElement={(rd3tProps) => renderNodeContent({ ...rd3tProps, nodeDatum: rd3tProps.nodeDatum as unknown as FamilyMember })}
             orientation="vertical"
             pathFunc="step"
-            translate={{ x: 400, y: 100 }}
-            separation={{ siblings: 2.5, nonSiblings: 3 }}
-            nodeSize={{ x: 350, y: 400 }}
+            translate={{ x: window.innerWidth / 2, y: 100 }}
+            separation={{ siblings: 3, nonSiblings: 4 }}
+            nodeSize={{ x: 400, y: 400 }}
             rootNodeClassName="node__root"
             branchNodeClassName="node__branch"
             leafNodeClassName="node__leaf"
+            pathClassFunc={() => 'text-pink-400 transition-all duration-300'}
             transitionDuration={800}
+            zoomable={true}
+            scaleExtent={{ min: 0.5, max: 1.5 }}
           />
         </div>
         <ConfirmDialog
@@ -705,7 +747,11 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
             setIsDeleteDialogOpen(false)
             setMemberToDelete(null)
           }}
-          onConfirm={confirmDelete}
+          onConfirm={() => {
+            if (memberToDelete) {
+              handleDeleteMember(memberToDelete.id, memberToDelete.isSpouse)
+            }
+          }}
           title="Delete Family Member"
           description="Are you sure you want to delete this family member? This action cannot be undone."
           confirmText="Delete"

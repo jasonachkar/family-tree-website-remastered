@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { X, Pencil, Save } from 'lucide-react'
+import { useToast } from "@/components/ui/use-toast"
+import { uploadImageToSupabase, deleteImageFromSupabase } from '@/utils/supabaseStorage'
 
 interface ViewPersonModalProps {
   person: Person
@@ -21,8 +23,10 @@ interface ViewPersonModalProps {
 export default function ViewPersonModal({ person, onClose, onEdit, onDelete, isOpen }: ViewPersonModalProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedPerson, setEditedPerson] = useState<Person>(person)
+  const { toast } = useToast()
 
-  const calculateAge = (dob: string, dod?: string): string => {
+  const calculateAge = (dob: string | undefined, dod?: string): string => {
+    if (!dob) return 'Not specified';
     const birthDate = new Date(dob);
     const endDate = dod ? new Date(dod) : new Date();
     let age = endDate.getFullYear() - birthDate.getFullYear();
@@ -41,22 +45,49 @@ export default function ViewPersonModal({ person, onClose, onEdit, onDelete, isO
     setEditedPerson(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       const reader = new FileReader()
-      reader.onloadend = () => {
-        setEditedPerson(prev => ({ ...prev, image: reader.result as string }))
+      reader.onloadend = async () => {
+        try {
+          const imageData = reader.result as string
+          const imageUrl = await uploadImageToSupabase(imageData)
+          setEditedPerson(prev => ({ ...prev, image: imageUrl }))
+        } catch (error) {
+          console.error('Error uploading image:', error)
+          toast({
+            title: "Error",
+            description: "Failed to upload image. Please try again.",
+          })
+        }
       }
       reader.readAsDataURL(file)
     }
-  };
+  }
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    onEdit(editedPerson);
-    setIsEditing(false);
-  };
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      if (editedPerson.image !== person.image && person.image) {
+        await deleteImageFromSupabase(person.image)
+      }
+      onEdit(editedPerson)
+      setIsEditing(false)
+    } catch (error) {
+      console.error('Error updating person:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update person. Please try again.",
+      })
+    }
+  }
+
+  const formatDate = (dateStr: string | undefined): string => {
+    if (!dateStr) return 'Not specified'
+    const date = new Date(dateStr + 'T00:00:00Z')
+    return date.toLocaleDateString()
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={() => onClose()}>
@@ -194,9 +225,9 @@ export default function ViewPersonModal({ person, onClose, onEdit, onDelete, isO
                   <h3 className="font-semibold">Personal Information</h3>
                   <div className="text-sm">
                     <p><span className="font-medium">Age:</span> {calculateAge(person.dob, person.dod)}</p>
-                    <p><span className="font-medium">Date of Birth:</span> {new Date(person.dob).toLocaleDateString()}</p>
+                    <p><span className="font-medium">Date of Birth:</span> {formatDate(person.dob)}</p>
                     {person.dod && (
-                      <p><span className="font-medium">Date of Death:</span> {new Date(person.dod).toLocaleDateString()}</p>
+                      <p><span className="font-medium">Date of Death:</span> {formatDate(person.dod)}</p>
                     )}
                     <p><span className="font-medium">Role:</span> {person.role || 'Not specified'}</p>
                   </div>

@@ -9,11 +9,12 @@ import { Button } from '@/components/ui/button'
 import { useToast } from "@/components/ui/use-toast"
 import DataManagement from '@/components/DataManagement'
 import { ExportedData } from '@/utils/jsonOperations'
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext'
 
 interface FamilyMember extends Person {
   children?: FamilyMember[]
-  spouse?: FamilyMember
+  spouses?: FamilyMember[]
+  name: string
 }
 
 export default function FamilyPage({ params }: { params: { id: string } }) {
@@ -22,15 +23,16 @@ export default function FamilyPage({ params }: { params: { id: string } }) {
   const [treeData, setTreeData] = useState<FamilyMember | null>(null)
   const { toast } = useToast()
   const [currentFamily, setCurrentFamily] = useState<{ id: string; name: string } | null>(null)
-  const { user } = useAuth();
+  const { user } = useAuth()
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const family = families.find(family => family.id === params.id) || null
+        const familyId = params.id
+        const family = families.find(family => family.id === familyId) || null
         setCurrentFamily(family)
         if (family) {
-          const loadedTreeData = await loadFamilyTreeFromKV(params.id)
+          const loadedTreeData = await loadFamilyTreeFromKV(familyId)
           setTreeData(loadedTreeData)
         }
       } catch (error) {
@@ -38,7 +40,7 @@ export default function FamilyPage({ params }: { params: { id: string } }) {
         toast({
           title: "Error",
           description: "Failed to load family data. Please try again.",
-          variant: "destructive",
+          duration: 5000,
         })
       }
     }
@@ -47,26 +49,28 @@ export default function FamilyPage({ params }: { params: { id: string } }) {
   }, [families, params.id, loadFamilyTreeFromKV, toast])
 
   const handleUpdateTree = async (updatedTree: FamilyMember) => {
+    const familyId = params.id
     setTreeData(updatedTree)
-    await saveFamilyTreeToKV(params.id, updatedTree)
+    await saveFamilyTreeToKV(familyId, updatedTree)
   }
 
   const getData = (): ExportedData => {
+    const familyId = params.id
     return {
       familyTree: treeData,
-      stories: getFamilyStories(params.id),
+      stories: getFamilyStories(familyId),
       exportDate: new Date().toISOString(),
-      familyId: params.id,
+      familyId: familyId,
       familyName: currentFamily?.name || 'Unknown Family',
     }
   }
 
   const handleImport = (data: ExportedData) => {
-    if (data.familyId !== params.id) {
+    const familyId = params.id
+    if (data.familyId !== familyId) {
       toast({
         title: "Warning",
         description: "The imported data is from a different family. Some data might not be compatible.",
-        variant: "destructive",
         duration: 5000,
       })
     }
@@ -74,16 +78,16 @@ export default function FamilyPage({ params }: { params: { id: string } }) {
     // Import family tree data
     if (data.familyTree) {
       setTreeData(data.familyTree)
-      saveFamilyTreeToKV(params.id, data.familyTree)
+      saveFamilyTreeToKV(familyId, data.familyTree)
     }
 
     // Import stories
     const familyStories = data.stories.map(story => ({
       ...story,
-      familyId: params.id, // Ensure stories are associated with current family
+      familyId: familyId, // Ensure stories are associated with current family
     }))
     setStories(prev => {
-      const otherStories = prev.filter(story => story.familyId !== params.id)
+      const otherStories = prev.filter(story => story.familyId !== familyId)
       return [...otherStories, ...familyStories]
     })
 
@@ -108,23 +112,29 @@ export default function FamilyPage({ params }: { params: { id: string } }) {
           )}
         </div>
         {treeData ? (
-          <FamilyTree 
-            initialData={treeData} 
-            familyId={params.id} 
-            onUpdate={handleUpdateTree} 
+          <FamilyTree
+            initialData={treeData}
+            familyId={params.id}
+            onUpdate={handleUpdateTree}
           />
         ) : (
           <div className="flex justify-center items-center h-64">
-            <Button 
-              onClick={() => setTreeData({ 
-                id: Date.now().toString(), 
-                firstName: 'Root', 
-                lastName: 'Person', 
-                familyId: params.id, 
-                x: 0, 
-                y: 0,
-                children: [] 
-              })}
+            <Button
+              onClick={() => {
+                const familyId = params.id
+                setTreeData({
+                  id: Date.now().toString(),
+                  firstName: 'Root',
+                  lastName: 'Person',
+                  familyId: familyId,
+                  x: 0,
+                  y: 0,
+                  children: [],
+                  dob: '',
+                  image: '',
+                  name: 'Root Person'
+                })
+              }}
               className="bg-pink-500 hover:bg-pink-600 text-white"
             >
               Create Family Tree

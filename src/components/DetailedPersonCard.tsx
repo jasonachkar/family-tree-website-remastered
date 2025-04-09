@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { FamilyMember } from './FamilyTree'
 import { useAuth } from '@/contexts/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, Calendar, User, BookOpen } from 'lucide-react'
+import { Heart, Calendar, User, BookOpen, MapPin, Star } from 'lucide-react'
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface DetailedPersonCardProps {
@@ -26,7 +26,8 @@ const formatDate = (dateStr: string) => {
   })
 }
 
-const calculateAge = (dob: string, dod?: string): number => {
+const calculateAge = (dob: string | undefined, dod?: string): number => {
+  if (!dob) return 0
   const birthDate = new Date(dob + 'T00:00:00Z')
   const endDate = dod ? new Date(dod + 'T00:00:00Z') : new Date()
   let age = endDate.getFullYear() - birthDate.getFullYear()
@@ -46,14 +47,14 @@ const DetailedPersonCard: React.FC<DetailedPersonCardProps> = ({ person, isOpen,
   }
 
   const age = calculateAge(person.dob, person.dod)
-  const shouldShowDates = user?.isAdmin || person.dod || (!isMinor && age >= 18)
+  const shouldShowDates = user?.isAdmin || person.dod || (!isMinor && person.dob && age >= 18)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] p-0 bg-white/95 backdrop-blur-sm overflow-hidden">
+      <DialogContent className="sm:max-w-[600px] p-0 bg-white/95 backdrop-blur-sm overflow-hidden border-2 border-pink-200">
         <DialogHeader className="p-6 bg-gradient-to-r from-pink-500 to-purple-500 text-white relative">
           <DialogTitle className="text-2xl font-bold text-center">
-            Get to know me!
+            {person.firstName} {person.lastName}
           </DialogTitle>
           <motion.div
             initial={{ scale: 0 }}
@@ -83,9 +84,12 @@ const DetailedPersonCard: React.FC<DetailedPersonCardProps> = ({ person, isOpen,
               animate={{ opacity: 1, y: 0 }}
               className="text-center"
             >
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                {person.firstName} {person.lastName}
-              </h2>
+              {person.role && (
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Star className="h-4 w-4 text-pink-500" />
+                  <p className="text-lg font-medium text-pink-600">{person.role}</p>
+                </div>
+              )}
               <div className="h-1 w-20 mx-auto bg-gradient-to-r from-pink-500 to-purple-500 rounded-full" />
             </motion.div>
           </div>
@@ -96,10 +100,10 @@ const DetailedPersonCard: React.FC<DetailedPersonCardProps> = ({ person, isOpen,
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="grid grid-cols-2 gap-4"
+                  className="grid grid-cols-1 md:grid-cols-2 gap-4"
                 >
                   {person.dob && (
-                    <div className="p-4 rounded-lg bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100">
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md transition-shadow duration-300">
                       <div className="flex items-center gap-2 text-pink-600 mb-2">
                         <Calendar className="h-4 w-4" />
                         <span className="font-semibold">Birth Date</span>
@@ -108,7 +112,7 @@ const DetailedPersonCard: React.FC<DetailedPersonCardProps> = ({ person, isOpen,
                     </div>
                   )}
                   {person.dod && (
-                    <div className="p-4 rounded-lg bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100">
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md transition-shadow duration-300">
                       <div className="flex items-center gap-2 text-pink-600 mb-2">
                         <Calendar className="h-4 w-4" />
                         <span className="font-semibold">Death Date</span>
@@ -116,7 +120,7 @@ const DetailedPersonCard: React.FC<DetailedPersonCardProps> = ({ person, isOpen,
                       <p className="text-gray-700">{formatDate(person.dod)}</p>
                     </div>
                   )}
-                  <div className="p-4 rounded-lg bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100">
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md transition-shadow duration-300">
                     <div className="flex items-center gap-2 text-pink-600 mb-2">
                       <User className="h-4 w-4" />
                       <span className="font-semibold">Age</span>
@@ -131,14 +135,14 @@ const DetailedPersonCard: React.FC<DetailedPersonCardProps> = ({ person, isOpen,
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-4 rounded-lg bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100"
+                className="p-4 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md transition-shadow duration-300"
               >
                 <div className="flex items-center gap-2 text-pink-600 mb-2">
                   <BookOpen className="h-4 w-4" />
                   <span className="font-semibold">About</span>
                 </div>
-                <ScrollArea className="h-[200px]">
-                  <p className="text-gray-700 whitespace-pre-wrap pr-4">{person.description}</p>
+                <ScrollArea className="h-[200px] pr-4">
+                  <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{person.description}</p>
                 </ScrollArea>
               </motion.div>
             )}
@@ -147,7 +151,7 @@ const DetailedPersonCard: React.FC<DetailedPersonCardProps> = ({ person, isOpen,
         <DialogFooter className="p-4 border-t border-pink-100">
           <Button
             onClick={onClose}
-            className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white"
+            className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white transition-all duration-300"
           >
             Close
           </Button>

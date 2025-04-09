@@ -3,6 +3,8 @@
 import { useState, FormEvent, ChangeEvent } from 'react'
 import { Person } from '@/types/Person'
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/use-toast"
+import { uploadImageToSupabase } from '@/utils/supabaseStorage'
 
 interface AddPersonModalProps {
   onAddPerson: (person: Person) => void
@@ -17,13 +19,24 @@ export default function AddPersonModal({ onAddPerson, onClose }: AddPersonModalP
   const [description, setDescription] = useState('')
   const [image, setImage] = useState('')
   const [role, setRole] = useState('')
+  const { toast } = useToast()
 
-  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       const reader = new FileReader()
-      reader.onloadend = () => {
-        setImage(reader.result as string)
+      reader.onloadend = async () => {
+        try {
+          const imageData = reader.result as string
+          const imageUrl = await uploadImageToSupabase(imageData)
+          setImage(imageUrl)
+        } catch (error) {
+          console.error('Error uploading image:', error)
+          toast({
+            title: "Error",
+            description: "Failed to upload image. Please try again.",
+          })
+        }
       }
       reader.readAsDataURL(file)
     }
