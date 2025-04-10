@@ -61,30 +61,33 @@ const CombinedSpouseCard: React.FC<CombinedSpouseCardProps> = ({
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="absolute -top-6 left-1/2 transform -translate-x-1/2"
+        className="absolute -top-6 left-1/2 transform -translate-x-1/2 z-10"
       >
-        <Heart className="w-6 h-6 text-pink-500 fill-pink-500" />
+        <div className="w-8 h-8 flex items-center justify-center bg-white rounded-full shadow-sm border border-gray-200">
+          <Heart className="w-4 h-4 text-indigo-500" />
+        </div>
       </motion.div>
       <AnimatePresence>
         {spouses.map((spouse, index) => {
-          const shouldShowDetails = user?.isAdmin || spouse.dod || (!isMinor && spouse.dob && calculateAge(spouse.dob) >= 18)
+          // Always show details
+          const shouldShowDetails = true
 
           return (
             <motion.div
               key={spouse.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ delay: index * 0.1 }}
-              className={`relative bg-white/95 backdrop-blur-sm border-2 ${selectedNode === spouse.id
-                  ? 'border-pink-500 shadow-lg shadow-pink-200/50'
-                  : 'border-pink-300'
-                } rounded-xl p-4 mb-4 last:mb-0 transition-all duration-300 hover:shadow-xl`}
+              transition={{ delay: index * 0.1, duration: 0.3 }}
+              className={`relative bg-white border ${selectedNode === spouse.id
+                ? 'border-indigo-500 shadow-md'
+                : 'border-gray-200'
+                } rounded-lg p-3 mb-3 last:mb-0 transition-all duration-200 hover:shadow-sm`}
               onClick={() => setSelectedNode(spouse.id)}
             >
               <div className="flex flex-col items-center">
                 <motion.div
-                  className="relative w-24 h-24 rounded-full overflow-hidden mb-3 border-2 border-pink-200 shadow-md"
+                  className="relative w-24 h-24 rounded-full overflow-hidden mb-3 border border-gray-200 shadow-sm"
                   whileHover={{ scale: 1.05 }}
                   transition={{ duration: 0.2 }}
                 >
@@ -93,66 +96,62 @@ const CombinedSpouseCard: React.FC<CombinedSpouseCardProps> = ({
                     alt={`${spouse.firstName} ${spouse.lastName}`}
                     layout="fill"
                     objectFit="cover"
-                    className="transition-transform duration-300 hover:scale-110"
+                    className="transition-all duration-300 hover:scale-105"
                   />
                 </motion.div>
                 <motion.h3
-                  className="text-lg font-semibold text-center max-w-full px-2 text-gray-800"
+                  className="text-base font-semibold text-center max-w-full px-2 text-gray-800"
                   layout
                 >
-                  {truncateText(`${spouse.firstName} ${spouse.lastName}`)}
+                  {truncateText(`${spouse.firstName} ${spouse.lastName}`, 20)}
                 </motion.h3>
                 {shouldShowDetails && (
                   <motion.div
                     className="text-center mt-2 space-y-1"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: 0.2 }}
+                    transition={{ delay: 0.1 }}
                   >
                     {spouse.dob && (
-                      <p className="text-sm text-gray-600">
+                      <p className="text-xs text-gray-600">
                         Born: {formatDate(spouse.dob)}
                       </p>
                     )}
                     {spouse.dod && (
-                      <p className="text-sm text-gray-600">
+                      <p className="text-xs text-gray-600">
                         Died: {formatDate(spouse.dod)}
                       </p>
                     )}
                     {spouse.role && (
-                      <p className="text-sm text-pink-600 font-medium">
-                        {truncateText(spouse.role)}
+                      <p className="text-xs text-indigo-600 font-medium">
+                        {truncateText(spouse.role, 20)}
                       </p>
                     )}
                   </motion.div>
                 )}
-                <div className="mt-4 w-full flex justify-center gap-2">
-                  {user?.isAdmin && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onEdit(spouse)
-                        }}
-                        className="border-pink-200 text-pink-600 hover:bg-pink-50 hover:text-pink-700 min-w-[60px] shadow-sm transition-all duration-300 hover:shadow"
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onDelete(spouse.id)
-                        }}
-                        className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 min-w-[60px] shadow-sm transition-all duration-300 hover:shadow"
-                      >
-                        Remove
-                      </Button>
-                    </>
-                  )}
+                <div className="mt-auto w-full flex justify-center gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onEdit(spouse)
+                    }}
+                    className="border-gray-200 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 min-w-[60px] shadow-sm transition-all duration-200 rounded"
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDelete(spouse.id)
+                    }}
+                    className="border-gray-200 text-red-600 hover:bg-red-50 hover:text-red-700 min-w-[60px] shadow-sm transition-all duration-200 rounded"
+                  >
+                    Remove
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -160,7 +159,7 @@ const CombinedSpouseCard: React.FC<CombinedSpouseCardProps> = ({
                       e.stopPropagation()
                       onViewDetails(spouse)
                     }}
-                    className="border-pink-200 text-pink-600 hover:bg-pink-50 hover:text-pink-700 min-w-[60px] shadow-sm transition-all duration-300 hover:shadow"
+                    className="border-gray-200 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 min-w-[60px] shadow-sm transition-all duration-200 rounded"
                   >
                     View
                   </Button>

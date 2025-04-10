@@ -1,17 +1,21 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo, useState } from 'react'
 import Image from 'next/image'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { FamilyMember } from './FamilyTree'
 import { useAuth } from '@/contexts/AuthContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, Calendar, User, BookOpen, MapPin, Star } from 'lucide-react'
+import { Heart, Calendar, User, BookOpen, MapPin, Star, X } from 'lucide-react'
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { getImageFromReference } from '@/utils/blobStorage'
+import { cn } from "@/lib/utils"
+import { Person } from "@/types/Person"
+import { VisuallyHidden } from "@/components/ui/visually-hidden"
 
 interface DetailedPersonCardProps {
-  person: FamilyMember | null
+  person: Person | null
   isOpen: boolean
   onClose: () => void
 }
@@ -26,136 +30,152 @@ const formatDate = (dateStr: string) => {
   })
 }
 
-const calculateAge = (dob: string | undefined, dod?: string): number => {
-  if (!dob) return 0
-  const birthDate = new Date(dob + 'T00:00:00Z')
-  const endDate = dod ? new Date(dod + 'T00:00:00Z') : new Date()
-  let age = endDate.getFullYear() - birthDate.getFullYear()
-  const monthDiff = endDate.getMonth() - birthDate.getMonth()
-  if (monthDiff < 0 || (monthDiff === 0 && endDate.getDate() < birthDate.getDate())) {
-    age--
-  }
-  return age
+const calculateAge = (dob?: string, dod?: string) => {
+  if (!dob) return "Not specified"
+
+  const birthDate = new Date(dob)
+  const endDate = dod ? new Date(dod) : new Date()
+  const ageDiff = endDate.getTime() - birthDate.getTime()
+  const ageDate = new Date(ageDiff)
+  const age = Math.abs(ageDate.getUTCFullYear() - 1970)
+
+  return age + (dod ? ' (deceased)' : '')
 }
 
 const DetailedPersonCard: React.FC<DetailedPersonCardProps> = ({ person, isOpen, onClose }) => {
   const { user } = useAuth()
   const isMinor = user?.isMinor || false
+  const [imageLoaded, setImageLoaded] = useState(false)
 
   if (!person) {
     return null
   }
 
   const age = calculateAge(person.dob, person.dod)
-  const shouldShowDates = user?.isAdmin || person.dod || (!isMinor && person.dob && age >= 18)
+  const shouldShowDates = true
+
+  // Resolve image reference if needed
+  const imageSrc = useMemo(() => {
+    if (!person.image) return '/placeholder.svg';
+
+    if (person.image.startsWith('img-ref:')) {
+      const actualImage = getImageFromReference(person.image);
+      return actualImage || '/placeholder.svg';
+    }
+
+    return person.image;
+  }, [person.image]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] p-0 bg-white/95 backdrop-blur-sm overflow-hidden border-2 border-pink-200">
-        <DialogHeader className="p-6 bg-gradient-to-r from-pink-500 to-purple-500 text-white relative">
-          <DialogTitle className="text-2xl font-bold text-center">
-            {person.firstName} {person.lastName}
-          </DialogTitle>
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute top-2 right-2"
-          >
-            <Heart className="h-6 w-6 fill-current" />
-          </motion.div>
-        </DialogHeader>
-        <div className="p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-          <div className="flex flex-col items-center space-y-6">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ duration: 0.5 }}
-              className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl"
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[650px] rounded-xl backdrop-blur-sm bg-white/90 dark:bg-black/90 shadow-xl border-indigo-100 dark:border-indigo-900">
+        <DialogTitle asChild>
+          <VisuallyHidden>
+            {person.firstName} {person.lastName} Details
+          </VisuallyHidden>
+        </DialogTitle>
+        <DialogHeader className="relative p-6 rounded-t-xl bg-gradient-to-r from-indigo-600 to-purple-600">
+          <div className="absolute right-4 top-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="rounded-full bg-white/20 hover:bg-white/30 text-white"
             >
-              <Image
-                src={person.image || '/placeholder.svg'}
-                alt={`${person.firstName} ${person.lastName}`}
-                fill
-                className="object-cover"
-              />
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center"
-            >
-              {person.role && (
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Star className="h-4 w-4 text-pink-500" />
-                  <p className="text-lg font-medium text-pink-600">{person.role}</p>
-                </div>
-              )}
-              <div className="h-1 w-20 mx-auto bg-gradient-to-r from-pink-500 to-purple-500 rounded-full" />
-            </motion.div>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
 
-          <div className="mt-8 space-y-6">
-            <AnimatePresence>
-              {shouldShowDates && (
+          <div className="flex items-center gap-4">
+            <div className="relative overflow-hidden">
+              {person.image ? (
+                <div className="relative h-36 w-36 rounded-full overflow-hidden border-4 border-white/30 shadow-lg">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: imageLoaded ? 1 : 0, scale: imageLoaded ? 1 : 0.9 }}
+                    transition={{ duration: 0.3 }}
+                    className="h-full w-full"
+                  >
+                    <Image
+                      src={person.image}
+                      alt={`${person.firstName} ${person.lastName}`}
+                      fill
+                      className="object-cover"
+                      onLoad={() => setImageLoaded(true)}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                  </motion.div>
+                </div>
+              ) : (
+                <div className="h-36 w-36 rounded-full bg-gradient-to-r from-indigo-300 to-purple-300 dark:from-indigo-700 dark:to-purple-700 flex items-center justify-center text-4xl font-bold text-white">
+                  {person.firstName?.charAt(0)}{person.lastName?.charAt(0)}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col text-white">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.1 }}
+              >
+                <h2 className="text-2xl font-bold tracking-tight">
+                  {person.firstName} {person.lastName}
+                </h2>
+              </motion.div>
+
+              {person.role && (
                 <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.2 }}
+                  className="mt-1"
                 >
-                  {person.dob && (
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md transition-shadow duration-300">
-                      <div className="flex items-center gap-2 text-pink-600 mb-2">
-                        <Calendar className="h-4 w-4" />
-                        <span className="font-semibold">Birth Date</span>
-                      </div>
-                      <p className="text-gray-700">{formatDate(person.dob)}</p>
-                    </div>
-                  )}
-                  {person.dod && (
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md transition-shadow duration-300">
-                      <div className="flex items-center gap-2 text-pink-600 mb-2">
-                        <Calendar className="h-4 w-4" />
-                        <span className="font-semibold">Death Date</span>
-                      </div>
-                      <p className="text-gray-700">{formatDate(person.dod)}</p>
-                    </div>
-                  )}
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md transition-shadow duration-300">
-                    <div className="flex items-center gap-2 text-pink-600 mb-2">
-                      <User className="h-4 w-4" />
-                      <span className="font-semibold">Age</span>
-                    </div>
-                    <p className="text-gray-700">{age} years{person.dod ? ' (Deceased)' : ''}</p>
-                  </div>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-white/20 text-white">
+                    {person.role}
+                  </span>
                 </motion.div>
               )}
-            </AnimatePresence>
 
-            {person.description && (
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-4 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 shadow-sm hover:shadow-md transition-shadow duration-300"
+                transition={{ duration: 0.3, delay: 0.3 }}
+                className="mt-3 space-y-1 text-white/90 text-sm"
               >
-                <div className="flex items-center gap-2 text-pink-600 mb-2">
-                  <BookOpen className="h-4 w-4" />
-                  <span className="font-semibold">About</span>
+                {person.dob && (
+                  <div>
+                    <span className="text-white/70">Born:</span> {new Date(person.dob).toLocaleDateString()}
+                  </div>
+                )}
+
+                {person.dod && (
+                  <div>
+                    <span className="text-white/70">Died:</span> {new Date(person.dod).toLocaleDateString()}
+                  </div>
+                )}
+
+                <div>
+                  <span className="text-white/70">Age:</span> {calculateAge(person.dob, person.dod)}
                 </div>
-                <ScrollArea className="h-[200px] pr-4">
-                  <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{person.description}</p>
-                </ScrollArea>
               </motion.div>
-            )}
+            </div>
           </div>
-        </div>
-        <DialogFooter className="p-4 border-t border-pink-100">
-          <Button
-            onClick={onClose}
-            className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white transition-all duration-300"
+        </DialogHeader>
+
+        {person.description && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.4 }}
+            className="px-6 py-4"
           >
-            Close
-          </Button>
-        </DialogFooter>
+            <h3 className="text-lg font-semibold mb-2 text-indigo-700 dark:text-indigo-400">Biography</h3>
+            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              {person.description}
+            </p>
+          </motion.div>
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { FamilyMember } from './FamilyTree'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import Image from 'next/image'
 import { ImageIcon, X, Heart } from 'lucide-react'
 import { useToast } from "@/components/ui/use-toast"
-import { uploadImageToSupabase, deleteImageFromSupabase } from '@/utils/supabaseStorage'
+import { uploadImageToBlob, deleteImageFromBlob, getImageFromReference } from '@/utils/blobStorage'
 
 interface EditMemberDialogProps {
   member: FamilyMember
@@ -51,6 +51,18 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
   const [isDragging, setIsDragging] = useState(false)
   const { toast } = useToast()
 
+  // Resolve image reference if present
+  const imageSrc = useMemo(() => {
+    if (!editedMember.image) return '';
+
+    if (editedMember.image.startsWith('img-ref:')) {
+      const actualImage = getImageFromReference(editedMember.image);
+      return actualImage || '';
+    }
+
+    return editedMember.image;
+  }, [editedMember.image]);
+
   useEffect(() => {
     setEditedMember({
       ...member,
@@ -71,7 +83,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
       reader.onloadend = async () => {
         try {
           const imageData = reader.result as string
-          const imageUrl = await uploadImageToSupabase(imageData)
+          const imageUrl = await uploadImageToBlob(imageData)
           setEditedMember({ ...editedMember, image: imageUrl })
         } catch (error) {
           console.error('Error uploading image:', error)
@@ -104,7 +116,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
       reader.onloadend = async () => {
         try {
           const imageData = reader.result as string
-          const imageUrl = await uploadImageToSupabase(imageData)
+          const imageUrl = await uploadImageToBlob(imageData)
           setEditedMember({ ...editedMember, image: imageUrl })
         } catch (error) {
           console.error('Error uploading image:', error)
@@ -121,7 +133,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
   const handleDelete = async () => {
     try {
       if (editedMember.image) {
-        await deleteImageFromSupabase(editedMember.image)
+        await deleteImageFromBlob(editedMember.image)
       }
       onDelete(editedMember.id, addType === 'spouse')
       onClose()
@@ -134,15 +146,24 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
     }
   }
 
+  const onSaveClick = () => {
+    // Make sure name is set based on first and last name
+    const updatedMember = {
+      ...editedMember,
+      name: `${editedMember.firstName} ${editedMember.lastName}`
+    };
+    onSave(updatedMember);
+  }
+
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-[500px] bg-white/95 backdrop-blur-sm max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
-              <Heart className="w-5 h-5 text-pink-500" />
+              <Heart className="w-5 h-5 text-blue-500" />
               {isEditing ? 'Edit Family Member' : 'Add Family Member'}
-              <Heart className="w-5 h-5 text-pink-500" />
+              <Heart className="w-5 h-5 text-blue-500" />
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[calc(90vh-200px)]">
@@ -156,7 +177,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                     id="firstName"
                     value={editedMember.firstName}
                     onChange={(e) => setEditedMember({ ...editedMember, firstName: e.target.value })}
-                    className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                    className="border-blue-100 focus:border-blue-300 focus:ring-blue-200"
                     placeholder="Enter first name..."
                     required
                   />
@@ -169,7 +190,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                     id="lastName"
                     value={editedMember.lastName}
                     onChange={(e) => setEditedMember({ ...editedMember, lastName: e.target.value })}
-                    className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                    className="border-blue-100 focus:border-blue-300 focus:ring-blue-200"
                     placeholder="Enter last name..."
                     required
                   />
@@ -185,7 +206,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                     type="date"
                     value={editedMember.dob}
                     onChange={(e) => setEditedMember({ ...editedMember, dob: e.target.value })}
-                    className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                    className="border-blue-100 focus:border-blue-300 focus:ring-blue-200"
                     required
                   />
                 </div>
@@ -196,9 +217,9 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                   <Input
                     id="dod"
                     type="date"
-                    value={editedMember.dod || ''}
+                    value={editedMember.dod}
                     onChange={(e) => setEditedMember({ ...editedMember, dod: e.target.value })}
-                    className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                    className="border-blue-100 focus:border-blue-300 focus:ring-blue-200"
                   />
                 </div>
               </div>
@@ -208,9 +229,9 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                 </Label>
                 <Input
                   id="role"
-                  value={editedMember.role || ''}
+                  value={editedMember.role}
                   onChange={(e) => setEditedMember({ ...editedMember, role: e.target.value })}
-                  className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                  className="border-blue-100 focus:border-blue-300 focus:ring-blue-200"
                   placeholder="Enter role..."
                 />
               </div>
@@ -220,16 +241,16 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                 </Label>
                 <Textarea
                   id="description"
-                  value={editedMember.description || ''}
+                  value={editedMember.description}
                   onChange={(e) => setEditedMember({ ...editedMember, description: e.target.value })}
-                  className="min-h-[100px] border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                  className="min-h-[100px] border-blue-100 focus:border-blue-300 focus:ring-blue-200"
                   placeholder="Enter description..."
                 />
               </div>
               <div className="space-y-2">
                 <Label className="text-gray-700 font-medium">Image</Label>
                 <div
-                  className={`relative border-2 border-dashed rounded-lg p-6 transition-colors duration-200 ${isDragging ? 'border-pink-500 bg-pink-50' : 'border-pink-200 hover:border-pink-300'
+                  className={`relative border-2 border-dashed rounded-lg p-6 transition-colors duration-200 ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-blue-200 hover:border-blue-300'
                     }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -246,7 +267,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                     {editedMember.image ? (
                       <div className="relative w-32 h-32 rounded-lg overflow-hidden group">
                         <Image
-                          src={editedMember.image}
+                          src={imageSrc}
                           alt="Member preview"
                           fill
                           className="object-cover"
@@ -255,8 +276,8 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-white hover:text-pink-200"
-                            onClick={handleDelete}
+                            className="text-white hover:text-blue-200"
+                            onClick={() => setEditedMember({ ...editedMember, image: '' })}
                           >
                             <X className="w-5 h-5" />
                           </Button>
@@ -264,12 +285,12 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                       </div>
                     ) : (
                       <>
-                        <ImageIcon className="w-10 h-10 text-pink-400" />
+                        <ImageIcon className="w-10 h-10 text-blue-400" />
                         <div className="text-center">
                           <Button
                             type="button"
                             variant="ghost"
-                            className="text-pink-500 hover:text-pink-600"
+                            className="text-blue-500 hover:text-blue-600"
                             onClick={() => fileInputRef.current?.click()}
                           >
                             Choose a file
@@ -294,7 +315,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                       <RadioGroupItem
                         value="child"
                         id="child"
-                        className="text-pink-500 border-pink-200"
+                        className="text-blue-500 border-blue-200"
                       />
                       <Label htmlFor="child">Child</Label>
                     </div>
@@ -302,7 +323,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                       <RadioGroupItem
                         value="spouse"
                         id="spouse"
-                        className="text-pink-500 border-pink-200"
+                        className="text-blue-500 border-blue-200"
                       />
                       <Label htmlFor="spouse">Spouse</Label>
                     </div>
@@ -329,13 +350,13 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                 type="button"
                 variant="outline"
                 onClick={onClose}
-                className="border-pink-200 text-pink-700 hover:bg-pink-50"
+                className="border-blue-200 text-blue-700 hover:bg-blue-50"
               >
                 Cancel
               </Button>
               <Button
-                onClick={() => onSave(editedMember)}
-                className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white"
+                onClick={onSaveClick}
+                className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
               >
                 {isEditing ? 'Update' : 'Add'}
               </Button>

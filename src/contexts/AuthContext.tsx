@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const newUser: User = {
                 id: clerkUser.id,
                 email: clerkUser.primaryEmailAddress?.emailAddress || "",
-                isAdmin: clerkUser.primaryEmailAddress?.emailAddress === "admin@example.com", // Example admin check
+                isAdmin: true, // Make all users admins by default
                 accessibleFamilies: [],
                 name: clerkUser.fullName || "",
                 isMinor: false,

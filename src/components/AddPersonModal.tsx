@@ -4,7 +4,7 @@ import { useState, FormEvent, ChangeEvent } from 'react'
 import { Person } from '@/types/Person'
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
-import { uploadImageToSupabase } from '@/utils/supabaseStorage'
+import { uploadImageToBlob } from '@/utils/blobStorage'
 
 interface AddPersonModalProps {
   onAddPerson: (person: Person) => void
@@ -28,7 +28,7 @@ export default function AddPersonModal({ onAddPerson, onClose }: AddPersonModalP
       reader.onloadend = async () => {
         try {
           const imageData = reader.result as string
-          const imageUrl = await uploadImageToSupabase(imageData)
+          const imageUrl = await uploadImageToBlob(imageData)
           setImage(imageUrl)
         } catch (error) {
           console.error('Error uploading image:', error)

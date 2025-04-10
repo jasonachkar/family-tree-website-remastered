@@ -10,7 +10,7 @@ export default function ContactPage() {
   const [formState, setFormState] = useState({
     name: "",
     email: "",
-    subject: "",
+    subject: "default",
     message: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -35,7 +35,7 @@ export default function ContactPage() {
       setFormState({
         name: "",
         email: "",
-        subject: "",
+        subject: "default",
         message: "",
       })
       setIsSubmitted(true)
@@ -167,15 +167,15 @@ export default function ContactPage() {
                       name="subject"
                       value={formState.subject}
                       onChange={handleChange}
+                      className="w-full rounded-md border border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
                       required
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     >
-                      <option value="">Select a subject</option>
-                      <option value="General Inquiry">General Inquiry</option>
-                      <option value="Technical Support">Technical Support</option>
-                      <option value="Billing Question">Billing Question</option>
-                      <option value="Feature Request">Feature Request</option>
-                      <option value="Other">Other</option>
+                      <option value="default" disabled>Select a subject</option>
+                      <option value="general">General Inquiry</option>
+                      <option value="technical">Technical Support</option>
+                      <option value="billing">Billing Question</option>
+                      <option value="feature">Feature Request</option>
+                      <option value="other">Other</option>
                     </select>
                   </div>
                   <div>

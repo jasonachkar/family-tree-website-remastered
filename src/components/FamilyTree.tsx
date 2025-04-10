@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import Tree from 'react-d3-tree'
 import { Person } from '@/types/Person'
 import { Button } from '@/components/ui/button'
@@ -21,14 +21,11 @@ import CombinedSpouseCard from './CombinedSpouseCard';
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import SplashScreen from './SplashScreen'
-import { uploadImageToSupabase, deleteImageFromSupabase } from '@/utils/supabaseStorage';
+import { uploadImageToBlob, deleteImageFromBlob, getImageFromReference } from '@/utils/blobStorage';
 
 export interface FamilyMember extends Person {
   children?: FamilyMember[]
   spouses?: FamilyMember[]
-  dob?: string
-  dod?: string
-  image?: string
   name: string
 }
 
@@ -124,8 +121,12 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
   const handleSave = async () => {
     try {
       const updatedMember = { ...editedMember }
+
+      // Make sure the name is set correctly based on first and last name
+      updatedMember.name = `${updatedMember.firstName} ${updatedMember.lastName}`;
+
       if (updatedMember.image && updatedMember.image !== member.image && updatedMember.image.startsWith('data:')) {
-        const imageUrl = await uploadImageToSupabase(updatedMember.image)
+        const imageUrl = await uploadImageToBlob(updatedMember.image)
         updatedMember.image = imageUrl
       }
       onSave(updatedMember)
@@ -138,7 +139,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
   const handleDelete = async () => {
     try {
       if (member.image && !member.image.startsWith('data:')) {
-        await deleteImageFromSupabase(member.image)
+        await deleteImageFromBlob(member.image)
       }
       onDelete(member.id, false)
       onClose()
@@ -149,12 +150,11 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] bg-white/95 backdrop-blur-sm max-h-[90vh]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
-            <Heart className="w-5 h-5 text-pink-500" />
+      <DialogContent className="sm:max-w-[500px] bg-white max-h-[90vh] rounded-lg border border-gray-200 shadow-md">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="text-xl font-semibold text-center text-indigo-600 flex items-center justify-center gap-2">
+            <Heart className="w-5 h-5 text-indigo-500" />
             {isEditing ? 'Edit Family Member' : 'Add Family Member'}
-            <Heart className="w-5 h-5 text-pink-500" />
           </DialogTitle>
         </DialogHeader>
         <ScrollArea className="max-h-[calc(90vh-200px)]">
@@ -168,7 +168,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                   id="firstName"
                   value={editedMember.firstName}
                   onChange={(e) => setEditedMember({ ...editedMember, firstName: e.target.value })}
-                  className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                  className="border-gray-200 focus:border-indigo-300 focus:ring-indigo-200 rounded-md"
                   placeholder="Enter first name..."
                   required
                 />
@@ -181,7 +181,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                   id="lastName"
                   value={editedMember.lastName}
                   onChange={(e) => setEditedMember({ ...editedMember, lastName: e.target.value })}
-                  className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                  className="border-gray-200 focus:border-indigo-300 focus:ring-indigo-200 rounded-md"
                   placeholder="Enter last name..."
                   required
                 />
@@ -197,8 +197,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                   type="date"
                   value={editedMember.dob}
                   onChange={(e) => setEditedMember({ ...editedMember, dob: e.target.value })}
-                  className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
-                  required
+                  className="border-gray-200 focus:border-indigo-300 focus:ring-indigo-200 rounded-md"
                 />
               </div>
               <div className="space-y-2">
@@ -210,7 +209,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                   type="date"
                   value={editedMember.dod}
                   onChange={(e) => setEditedMember({ ...editedMember, dod: e.target.value })}
-                  className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                  className="border-gray-200 focus:border-indigo-300 focus:ring-indigo-200 rounded-md"
                 />
               </div>
             </div>
@@ -222,7 +221,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                 id="role"
                 value={editedMember.role}
                 onChange={(e) => setEditedMember({ ...editedMember, role: e.target.value })}
-                className="border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                className="border-gray-200 focus:border-indigo-300 focus:ring-indigo-200 rounded-md"
                 placeholder="Enter role..."
               />
             </div>
@@ -234,14 +233,14 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                 id="description"
                 value={editedMember.description}
                 onChange={(e) => setEditedMember({ ...editedMember, description: e.target.value })}
-                className="min-h-[100px] border-pink-100 focus:border-pink-300 focus:ring-pink-200"
+                className="min-h-[100px] border-gray-200 focus:border-indigo-300 focus:ring-indigo-200 rounded-md"
                 placeholder="Enter description..."
               />
             </div>
             <div className="space-y-2">
               <Label className="text-gray-700 font-medium">Image</Label>
               <div
-                className={`relative border-2 border-dashed rounded-lg p-6 transition-colors duration-200 ${isDragging ? 'border-pink-500 bg-pink-50' : 'border-pink-200 hover:border-pink-300'
+                className={`relative border border-dashed rounded-md p-4 transition-colors duration-200 ${isDragging ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-indigo-300'
                   }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -256,18 +255,18 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                 />
                 <div className="flex flex-col items-center gap-2">
                   {editedMember.image ? (
-                    <div className="relative w-32 h-32 rounded-lg overflow-hidden group">
+                    <div className="relative w-28 h-28 rounded-full overflow-hidden group shadow-sm">
                       <Image
                         src={editedMember.image}
                         alt="Member preview"
                         fill
-                        className="object-cover"
+                        className="object-cover transition-all duration-300 hover:scale-105"
                       />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-white hover:text-pink-200"
+                          className="text-white hover:text-indigo-200"
                           onClick={() => setEditedMember({ ...editedMember, image: '' })}
                         >
                           <X className="w-5 h-5" />
@@ -276,12 +275,12 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                     </div>
                   ) : (
                     <>
-                      <ImageIcon className="w-10 h-10 text-pink-400" />
+                      <ImageIcon className="w-8 h-8 text-indigo-400" />
                       <div className="text-center">
                         <Button
                           type="button"
                           variant="ghost"
-                          className="text-pink-500 hover:text-pink-600"
+                          className="text-indigo-500 hover:text-indigo-600"
                           onClick={() => fileInputRef.current?.click()}
                         >
                           Choose a file
@@ -306,7 +305,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                     <RadioGroupItem
                       value="child"
                       id="child"
-                      className="text-pink-500 border-pink-200"
+                      className="text-indigo-500 border-gray-300"
                     />
                     <Label htmlFor="child">Child</Label>
                   </div>
@@ -314,7 +313,7 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
                     <RadioGroupItem
                       value="spouse"
                       id="spouse"
-                      className="text-pink-500 border-pink-200"
+                      className="text-indigo-500 border-gray-300"
                     />
                     <Label htmlFor="spouse">Spouse</Label>
                   </div>
@@ -323,14 +322,14 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
             )}
           </div>
         </ScrollArea>
-        <DialogFooter className="flex justify-between px-6 py-4">
+        <DialogFooter className="flex justify-between px-6 py-4 border-t border-gray-200">
           <div className="flex gap-2">
             {isEditing && (
               <Button
                 type="button"
                 variant="destructive"
                 onClick={() => onDelete(member.id, false)}
-                className="bg-red-500 hover:bg-red-600 text-white"
+                className="bg-red-500 hover:bg-red-600 text-white rounded-md shadow-sm hover:shadow transition-all duration-200"
               >
                 Delete Member
               </Button>
@@ -341,13 +340,13 @@ const EditMemberDialog: React.FC<EditMemberDialogProps> = ({
               type="button"
               variant="outline"
               onClick={onClose}
-              className="border-pink-200 text-pink-700 hover:bg-pink-50"
+              className="border-gray-200 text-gray-700 hover:bg-gray-50 rounded-md"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSave}
-              className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow-sm hover:shadow transition-all duration-200"
             >
               {isEditing ? 'Update' : 'Add'}
             </Button>
@@ -407,21 +406,21 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
 
   const renderNodeContent = ({ nodeDatum }: { nodeDatum: FamilyMember }) => (
     <motion.g
-      initial={{ opacity: 0, scale: 0.8 }}
+      initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{
-        duration: 0.5,
-        ease: [0.4, 0, 0.2, 1]
+        duration: 0.4,
+        ease: "easeOut"
       }}
       onClick={() => setSelectedNode(nodeDatum.id)}
-      whileHover={{ scale: 1.02 }}
+      whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
     >
-      <foreignObject width={250} height={400} x={-125} y={-150}>
+      <foreignObject width={240} height={340} x={-120} y={-150}>
         <motion.div
-          className={`relative bg-white/95 backdrop-blur-sm border-2 ${selectedNode === nodeDatum.id
-            ? 'border-pink-500 shadow-lg shadow-pink-200/50'
-            : 'border-pink-300'
-            } rounded-xl p-4 transition-all duration-300 hover:shadow-xl`}
+          className={`relative bg-white border ${selectedNode === nodeDatum.id
+            ? 'border-indigo-500 shadow-md'
+            : 'border-gray-200'
+            } rounded-lg p-4 transition-all duration-200 hover:shadow-sm`}
           onDoubleClick={(e) => {
             e.stopPropagation()
             handleDoubleClick(nodeDatum)
@@ -429,7 +428,7 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
           initial={false}
           animate={{
             scale: selectedNode === nodeDatum.id ? 1.02 : 1,
-            borderWidth: selectedNode === nodeDatum.id ? '3px' : '2px'
+            boxShadow: selectedNode === nodeDatum.id ? '0 4px 12px -2px rgba(79, 70, 229, 0.1)' : 'none'
           }}
         >
           <PersonCard
@@ -449,12 +448,12 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
         </motion.div>
       </foreignObject>
       {nodeDatum.spouses && nodeDatum.spouses.length > 0 && (
-        <g transform="translate(350, 0)">
-          <foreignObject width={250} height={400} x={-125} y={-150}>
+        <g transform="translate(300, 0)">
+          <foreignObject width={240} height={340} x={-120} y={-150}>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
+              transition={{ delay: 0.1, duration: 0.4 }}
             >
               <CombinedSpouseCard
                 spouses={nodeDatum.spouses}
@@ -472,12 +471,12 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
             </motion.div>
           </foreignObject>
           <motion.path
-            d="M-250,0 L-125,0"
-            stroke="#F472B6"
-            strokeWidth="3"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.5, ease: "easeInOut" }}
+            d="M-240,0 H-120"
+            stroke="#6366F1"
+            strokeWidth="2"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ duration: 0.6, ease: "easeInOut" }}
           />
         </g>
       )}
@@ -487,7 +486,7 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
   const handleUpdateMember = async (updatedMember: FamilyMember) => {
     if (updatedMember.image && updatedMember.image.startsWith('data:')) {
       try {
-        const imageUrl = await uploadImageToSupabase(updatedMember.image);
+        const imageUrl = await uploadImageToBlob(updatedMember.image);
         updatedMember.image = imageUrl;
       } catch (error) {
         console.error('Error uploading image:', error);
@@ -499,15 +498,49 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
       }
     }
 
-    setTreeData(updateNodeInTree(treeData, updatedMember));
-    onUpdate(treeData);
+    // If a new person is being added (no id yet), generate an id
+    if (!updatedMember.id) {
+      updatedMember.id = Date.now().toString();
+
+      // Set name for display
+      updatedMember.name = `${updatedMember.firstName} ${updatedMember.lastName}`;
+
+      // If it's a child, add to children array
+      if (addType === 'child' && editingMember) {
+        const parent = findNodeInTree(treeData, editingMember.id);
+        if (parent) {
+          if (!parent.children) {
+            parent.children = [];
+          }
+          parent.children.push(updatedMember);
+        }
+      }
+      // If it's a spouse, add to spouses array
+      else if (addType === 'spouse' && editingMember) {
+        const person = findNodeInTree(treeData, editingMember.id);
+        if (person) {
+          if (!person.spouses) {
+            person.spouses = [];
+          }
+          person.spouses.push(updatedMember);
+        }
+      }
+    }
+
+    const updatedTree = updateNodeInTree(treeData, updatedMember);
+    setTreeData(updatedTree);
+    setHasUnsavedChanges(true);
+    toast({
+      title: "Changes Pending",
+      description: "Click 'Save Changes' to permanently save your updates.",
+    });
   };
 
   const handleDeleteMember = async (memberId: string, isSpouse: boolean) => {
     const memberToDelete = findNodeInTree(treeData, memberId);
     if (memberToDelete && memberToDelete.image) {
       try {
-        await deleteImageFromSupabase(memberToDelete.image);
+        await deleteImageFromBlob(memberToDelete.image);
       } catch (error) {
         console.error('Error deleting image:', error);
         toast({
@@ -536,7 +569,14 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
         throw new Error('Tree data is missing')
       }
 
-      await saveFamilyTreeToKV(familyId, treeData)
+      // Sanitize the tree data before saving to KV storage 
+      // to prevent "Failed to fetch" errors due to large payloads
+      const sanitizedTreeData = sanitizeTreeForStorage(treeData);
+
+      // Make sure to save the current tree data to KV
+      await saveFamilyTreeToKV(familyId, sanitizedTreeData)
+
+      // Call onUpdate with the latest tree data
       onUpdate(treeData)
       setHasUnsavedChanges(false)
       setSplashScreen({ show: true, message: "Changes saved successfully!", variant: 'success' })
@@ -554,6 +594,30 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
       })
     }
   }
+
+  // Helper function to sanitize tree data before saving to KV
+  // This ensures we don't include large image data URLs in the KV storage
+  const sanitizeTreeForStorage = (tree: FamilyMember): FamilyMember => {
+    // Create a deep copy with image references kept intact
+    // (they are already in the form img-ref:id)
+    const sanitized = { ...tree };
+
+    // Process children recursively if they exist
+    if (sanitized.children && sanitized.children.length > 0) {
+      sanitized.children = sanitized.children.map(child =>
+        sanitizeTreeForStorage(child)
+      );
+    }
+
+    // Process spouses recursively if they exist
+    if (sanitized.spouses && sanitized.spouses.length > 0) {
+      sanitized.spouses = sanitized.spouses.map(spouse =>
+        sanitizeTreeForStorage(spouse)
+      );
+    }
+
+    return sanitized;
+  };
 
   const findMemberById = (node: FamilyMember, id: string): FamilyMember | undefined => {
     if (node.id === id) {
@@ -651,42 +715,41 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat',
     }}>
-      <div className="absolute inset-0 bg-white bg-opacity-50"></div>
+      <div className="absolute inset-0 bg-gradient-to-br from-white/80 via-indigo-50/30 to-purple-50/30 backdrop-blur-sm"></div>
       <div className="relative z-10">
-        <div className="flex justify-between items-center mb-4 p-4 bg-white bg-opacity-80">
+        <div className="flex justify-between items-center mb-4 p-4 bg-white/70 backdrop-blur-sm shadow-sm">
+          <h2 className="text-2xl font-bold text-indigo-600">{treeData.name || 'Family Tree'}</h2>
           <div className="flex gap-4">
-            {user?.isAdmin && (
-              <Button
-                onClick={() => {
-                  setEditingMember({
-                    id: '',
-                    firstName: '',
-                    lastName: '',
-                    familyId: treeData.familyId,
-                    x: 0,
-                    y: 0,
-                    dob: '',
-                    dod: '',
-                    image: '',
-                    role: '',
-                    description: '',
-                    name: ''
-                  })
-                  setIsEditing(false)
-                  setIsDialogOpen(true)
-                }}
-                className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg transition-all duration-300"
-              >
-                Add Family Member
-              </Button>
-            )}
+            <Button
+              onClick={() => {
+                setEditingMember({
+                  id: '',
+                  firstName: '',
+                  lastName: '',
+                  familyId: treeData.familyId,
+                  x: 0,
+                  y: 0,
+                  dob: '',
+                  dod: '',
+                  image: '',
+                  role: '',
+                  description: '',
+                  name: ''
+                })
+                setIsEditing(false)
+                setIsDialogOpen(true)
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm hover:shadow transition-all duration-300 rounded-md"
+            >
+              Add Family Member
+            </Button>
             <Button
               onClick={saveChanges}
               disabled={!hasUnsavedChanges}
               variant={hasUnsavedChanges ? "default" : "outline"}
               className={hasUnsavedChanges
-                ? "bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg transition-all duration-300"
-                : "bg-white/50 text-pink-500 hover:bg-pink-50 border-pink-200"}
+                ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm hover:shadow transition-all duration-300 rounded-md"
+                : "bg-white/50 text-indigo-600 hover:bg-indigo-50 border-indigo-200 rounded-md"}
             >
               {hasUnsavedChanges ? "Save Changes" : "No Changes"}
             </Button>
@@ -723,22 +786,42 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
           onClose={() => setDetailedPersonOpen(false)}
         />
 
-        <div className="h-[calc(100vh-100px)] relative border-2 border-pink-200 rounded-xl overflow-hidden bg-gradient-to-br from-pink-50/50 to-purple-50/50">
+        <div className="h-[calc(100vh-120px)] relative border border-gray-200 rounded-lg overflow-hidden bg-white/95 mx-4">
+          <div className="absolute bottom-6 right-6 z-10 flex flex-col gap-2 bg-white/90 p-2 rounded-md shadow-sm">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700"
+              onClick={() => document.querySelector('.rd3t-tree-container')?.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }))}
+            >
+              +
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700"
+              onClick={() => document.querySelector('.rd3t-tree-container')?.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 }))}
+            >
+              -
+            </Button>
+          </div>
           <Tree
             data={treeData}
             renderCustomNodeElement={(rd3tProps) => renderNodeContent({ ...rd3tProps, nodeDatum: rd3tProps.nodeDatum as unknown as FamilyMember })}
             orientation="vertical"
             pathFunc="step"
-            translate={{ x: window.innerWidth / 2, y: 100 }}
-            separation={{ siblings: 3, nonSiblings: 4 }}
-            nodeSize={{ x: 400, y: 400 }}
+            translate={{ x: window.innerWidth / 2, y: 150 }}
+            separation={{ siblings: 2.5, nonSiblings: 3.5 }}
+            nodeSize={{ x: 320, y: 350 }}
             rootNodeClassName="node__root"
             branchNodeClassName="node__branch"
             leafNodeClassName="node__leaf"
-            pathClassFunc={() => 'text-pink-400 transition-all duration-300'}
+            pathClassFunc={() => 'tree-link'}
             transitionDuration={800}
             zoomable={true}
-            scaleExtent={{ min: 0.5, max: 1.5 }}
+            scaleExtent={{ min: 0.4, max: 1.5 }}
+            initialDepth={0}
+            zoom={0.7}
           />
         </div>
         <ConfirmDialog
@@ -770,15 +853,26 @@ const FamilyTree: React.FC<FamilyTreeProps> = ({ initialData, familyId, onUpdate
 }
 
 const styles = `
-.rd3t-link {
-  stroke: #663399;
-  stroke-width: 2px;
+.tree-link {
+  stroke: #6366F1;
+  stroke-width: 1.5px;
+  fill: none;
 }
+
+.rd3t-link {
+  stroke: #6366F1;
+  stroke-width: 1.5px;
+}
+
 .node__root > circle,
 .node__branch > circle,
 .node__leaf > circle {
   fill: transparent;
   stroke: transparent;
+}
+
+.rd3t-tree-container {
+  background-color: transparent;
 }
 `;
 

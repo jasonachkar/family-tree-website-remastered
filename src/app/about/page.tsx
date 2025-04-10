@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { GitBranch, Users, History, Shield } from "lucide-react"
+import Image from "next/image"
 
 export default function AboutPage() {
   return (
@@ -97,7 +98,13 @@ export default function AboutPage() {
             <div className="mt-8">
               <div className="flex flex-col items-center space-y-2">
                 <div className="relative w-24 h-24 rounded-full overflow-hidden">
-                  <img src="/placeholder.svg" alt="Jason Achkar Diab" className="object-cover w-full h-full" />
+                  <Image
+                    src="/jason.png"
+                    alt="Jason Achkar Diab"
+                    width={96}
+                    height={96}
+                    className="object-cover w-full h-full"
+                  />
                 </div>
                 <h3 className="text-xl font-bold">Jason Achkar Diab</h3>
                 <p className="text-blue-600">Founder & CEO</p>

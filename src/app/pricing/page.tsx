@@ -77,7 +77,7 @@ export default function PricingPage() {
       notIncluded: [],
       priceId: {
         monthly: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || "price_monthly",
-        yearly: "price_yearly",
+        yearly: process.env.NEXT_PUBLIC_STRIPE_PREMIUM_YEARLY_ID || "price_yearly",
       },
       popular: true,
     },
@@ -96,7 +96,10 @@ export default function PricingPage() {
         "Advanced media storage",
       ],
       notIncluded: [],
-      priceId: { monthly: "price_family_monthly", yearly: "price_family_yearly" },
+      priceId: {
+        monthly: process.env.NEXT_PUBLIC_STRIPE_FAMILY_MONTHLY_ID || "price_family_monthly",
+        yearly: process.env.NEXT_PUBLIC_STRIPE_FAMILY_YEARLY_ID || "price_family_yearly"
+      },
       popular: false,
     },
   }
@@ -120,14 +123,12 @@ export default function PricingPage() {
               </div>
               <button
                 onClick={() => setSelectedPlan(selectedPlan === "monthly" ? "yearly" : "monthly")}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                  selectedPlan === "yearly" ? "bg-blue-600" : "bg-gray-200"
-                }`}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${selectedPlan === "yearly" ? "bg-blue-600" : "bg-gray-200"
+                  }`}
               >
                 <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                    selectedPlan === "yearly" ? "translate-x-6" : "translate-x-1"
-                  }`}
+                  className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${selectedPlan === "yearly" ? "translate-x-6" : "translate-x-1"
+                    }`}
                 />
               </button>
               <div className="flex items-center">

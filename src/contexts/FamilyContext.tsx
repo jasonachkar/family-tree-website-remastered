@@ -5,6 +5,7 @@ import { createContext, useContext, useState, useEffect } from "react"
 import type { Person } from "@/types/Person"
 import { getKV, setKV } from "@/utils/redis"
 import { useUser } from "@clerk/nextjs"
+import { uploadImageToBlob } from "@/utils/blobStorage"
 
 interface Family {
   id: string
@@ -13,6 +14,8 @@ interface Family {
   ownerId: string
   createdAt: string
   updatedAt: string
+  collaborators?: string[]
+  privacyLevel?: 'private' | 'collaborators' | 'public'
 }
 
 interface FamilyContextType {
@@ -25,8 +28,14 @@ interface FamilyContextType {
   getFamilyPeople: (familyId: string) => Person[]
   saveFamilyTreeToKV: (familyId: string, treeData: any) => Promise<void>
   loadFamilyTreeFromKV: (familyId: string) => Promise<any>
-  addFamily: (name: string, image: string) => Promise<void>
+  addFamily: (name: string, image: string) => Promise<string>
   getAccessibleFamilies: (accessibleFamilyIds: string[]) => Family[]
+  inviteCollaborator: (familyId: string, email: string) => Promise<boolean>
+  removeCollaborator: (familyId: string, userId: string) => Promise<boolean>
+  setFamilyPrivacy: (familyId: string, level: 'private' | 'collaborators' | 'public') => Promise<boolean>
+  canUserAccessFamily: (userId: string, familyId: string) => boolean
+  getShareableLink: (familyId: string) => string
+  exportFamilyTree: (familyId: string, format: 'json' | 'pdf' | 'gedcom') => Promise<string>
 }
 
 const FamilyContext = createContext<FamilyContextType | undefined>(undefined)
@@ -173,16 +182,29 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
       throw new Error("User must be signed in to add a family")
     }
 
-    const newFamily: Family = {
-      id: Date.now().toString(),
-      name,
-      image,
-      ownerId: user.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-
     try {
+      // Upload image to Blob if provided
+      let imageUrl = image
+      if (image && image.startsWith('data:')) {
+        try {
+          imageUrl = await uploadImageToBlob(image)
+        } catch (error) {
+          console.error("Error uploading image:", error)
+          throw new Error("Failed to upload family image")
+        }
+      }
+
+      const newFamily: Family = {
+        id: Date.now().toString(),
+        name,
+        image: imageUrl,
+        ownerId: user.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        collaborators: [],
+        privacyLevel: 'private'
+      }
+
       const updatedFamilies = [...families, newFamily]
       setFamilies(updatedFamilies)
       await setKV(`families_${user.id}`, updatedFamilies, true)
@@ -196,6 +218,8 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
         }
         await setKV(`user_${user.id}`, updatedUserData, true)
       }
+
+      return newFamily.id
     } catch (error) {
       console.error("Error saving new family:", error)
       throw error
@@ -217,6 +241,201 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     setFamilies(updatedFamilies)
   }
 
+  const inviteCollaborator = async (familyId: string, email: string): Promise<boolean> => {
+    try {
+      if (!isSignedIn || !user) {
+        throw new Error("User must be signed in to invite collaborators")
+      }
+
+      // Check if user has rights to add collaborators
+      const family = families.find(f => f.id === familyId)
+      if (!family) {
+        throw new Error("Family not found")
+      }
+
+      if (family.ownerId !== user.id && !family.collaborators?.includes(user.id)) {
+        throw new Error("You don't have permission to invite collaborators")
+      }
+
+      // In a real app, you would send an email invitation
+      // For now, we'll just simulate by finding the user by email
+      // and adding them to collaborators
+
+      // This is a mock API call - replace with actual Clerk API
+      // const invitedUser = await clerkClient.users.getUserByEmail(email);
+      // For demo, we'll just use email as ID
+      const invitedUserId = email
+
+      // Update the family's collaborators
+      const updatedFamilies = families.map(f => {
+        if (f.id === familyId) {
+          const currentCollaborators = f.collaborators || []
+          if (currentCollaborators.includes(invitedUserId)) {
+            return f // User already a collaborator
+          }
+          return {
+            ...f,
+            collaborators: [...currentCollaborators, invitedUserId],
+            updatedAt: new Date().toISOString()
+          }
+        }
+        return f
+      })
+
+      setFamilies(updatedFamilies)
+      await setKV(`families_${user.id}`, updatedFamilies, true)
+
+      return true
+    } catch (error) {
+      console.error("Error inviting collaborator:", error)
+      return false
+    }
+  }
+
+  const removeCollaborator = async (familyId: string, collaboratorId: string): Promise<boolean> => {
+    try {
+      if (!isSignedIn || !user) {
+        throw new Error("User must be signed in to remove collaborators")
+      }
+
+      // Check if user has rights
+      const family = families.find(f => f.id === familyId)
+      if (!family) {
+        throw new Error("Family not found")
+      }
+
+      if (family.ownerId !== user.id) {
+        throw new Error("Only the owner can remove collaborators")
+      }
+
+      // Update the family's collaborators
+      const updatedFamilies = families.map(f => {
+        if (f.id === familyId) {
+          const currentCollaborators = f.collaborators || []
+          return {
+            ...f,
+            collaborators: currentCollaborators.filter(id => id !== collaboratorId),
+            updatedAt: new Date().toISOString()
+          }
+        }
+        return f
+      })
+
+      setFamilies(updatedFamilies)
+      await setKV(`families_${user.id}`, updatedFamilies, true)
+
+      return true
+    } catch (error) {
+      console.error("Error removing collaborator:", error)
+      return false
+    }
+  }
+
+  const setFamilyPrivacy = async (familyId: string, level: 'private' | 'collaborators' | 'public'): Promise<boolean> => {
+    try {
+      if (!isSignedIn || !user) {
+        throw new Error("User must be signed in to change privacy settings")
+      }
+
+      // Check if user has rights
+      const family = families.find(f => f.id === familyId)
+      if (!family) {
+        throw new Error("Family not found")
+      }
+
+      if (family.ownerId !== user.id) {
+        throw new Error("Only the owner can change privacy settings")
+      }
+
+      // Update the family's privacy level
+      const updatedFamilies = families.map(f => {
+        if (f.id === familyId) {
+          return {
+            ...f,
+            privacyLevel: level,
+            updatedAt: new Date().toISOString()
+          }
+        }
+        return f
+      })
+
+      setFamilies(updatedFamilies)
+      await setKV(`families_${user.id}`, updatedFamilies, true)
+
+      return true
+    } catch (error) {
+      console.error("Error setting family privacy:", error)
+      return false
+    }
+  }
+
+  const canUserAccessFamily = (userId: string, familyId: string): boolean => {
+    const family = families.find(f => f.id === familyId)
+    if (!family) return false
+
+    // Owner always has access
+    if (family.ownerId === userId) return true
+
+    // Check privacy level
+    switch (family.privacyLevel) {
+      case 'public':
+        return true
+      case 'collaborators':
+        return family.collaborators?.includes(userId) || false
+      case 'private':
+      default:
+        return family.ownerId === userId
+    }
+  }
+
+  const getShareableLink = (familyId: string): string => {
+    const family = families.find(f => f.id === familyId)
+    if (!family) throw new Error("Family not found")
+
+    // In a real app, you might want to generate a secure token
+    // For now, just return the direct link
+    return `${window.location.origin}/family/${familyId}`
+  }
+
+  const exportFamilyTree = async (familyId: string, format: 'json' | 'pdf' | 'gedcom'): Promise<string> => {
+    try {
+      const treeData = await loadFamilyTreeFromKV(familyId)
+      if (!treeData) throw new Error("Tree data not found")
+
+      const family = families.find(f => f.id === familyId)
+      if (!family) throw new Error("Family not found")
+
+      // Handle different export formats
+      switch (format) {
+        case 'json':
+          // Create a downloadable JSON file
+          const jsonData = JSON.stringify({
+            familyTree: treeData,
+            family: family,
+            exportDate: new Date().toISOString()
+          }, null, 2)
+
+          return URL.createObjectURL(new Blob([jsonData], { type: 'application/json' }))
+
+        case 'pdf':
+          // In a real app, you would generate a PDF here
+          // For now, just return an error message
+          throw new Error("PDF export not implemented yet")
+
+        case 'gedcom':
+          // In a real app, you would convert to GEDCOM format here
+          // For now, just return an error message
+          throw new Error("GEDCOM export not implemented yet")
+
+        default:
+          throw new Error("Unsupported export format")
+      }
+    } catch (error) {
+      console.error("Error exporting family tree:", error)
+      throw error
+    }
+  }
+
   return (
     <FamilyContext.Provider
       value={{
@@ -231,6 +450,12 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
         loadFamilyTreeFromKV,
         addFamily,
         getAccessibleFamilies,
+        inviteCollaborator,
+        removeCollaborator,
+        setFamilyPrivacy,
+        canUserAccessFamily,
+        getShareableLink,
+        exportFamilyTree
       }}
     >
       {children}
