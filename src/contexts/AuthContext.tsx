@@ -50,6 +50,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userData = await getKV(`user_${clerkUser.id}`)
 
             if (userData) {
+              // Log the subscription tier for debugging
+              console.log(`User ${clerkUser.id} has subscription tier: ${userData.subscriptionTier}`)
+
+              // Validate the subscription tier and fix if not set properly
+              if (!userData.subscriptionTier ||
+                (userData.subscriptionTier !== "free" &&
+                  userData.subscriptionTier !== "premium" &&
+                  userData.subscriptionTier !== "family")) {
+
+                console.log(`Fixing invalid subscription tier for user ${clerkUser.id}`);
+                userData.subscriptionTier = "free";
+                await setKV(`user_${clerkUser.id}`, userData);
+              }
+
               setUser(userData)
             } else {
               // Create new user data if not found
@@ -60,10 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 accessibleFamilies: [],
                 name: clerkUser.fullName || "",
                 isMinor: false,
-                subscriptionTier: "free",
+                subscriptionTier: "free", // Ensure this is set to free for new users
                 subscriptionStatus: "active",
               }
 
+              console.log(`Created new user with default subscription tier: ${newUser.subscriptionTier}`)
               await setKV(`user_${clerkUser.id}`, newUser)
               setUser(newUser)
             }

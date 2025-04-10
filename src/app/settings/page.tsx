@@ -10,11 +10,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/components/ui/use-toast"
-import { Settings, User, CreditCard, Bell, Shield, LogOut } from "lucide-react"
+import { Settings, User, CreditCard, Bell, Shield, LogOut, Check } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/contexts/AuthContext"
+import { SUBSCRIPTION_LIMITS } from "@/utils/subscriptionLimits"
 
 export default function SettingsPage() {
-    const { isSignedIn, isLoaded, user } = useUser()
+    const { isSignedIn, isLoaded, user: clerkUser } = useUser()
+    const { user: authUser } = useAuth()
     const { signOut } = useClerk()
     const router = useRouter()
     const { toast } = useToast()
@@ -45,6 +48,27 @@ export default function SettingsPage() {
             setIsLoading(false)
         }
     }
+
+    // Get subscription details
+    const subscriptionTier = authUser?.subscriptionTier || "free"
+    const subscriptionStatus = authUser?.subscriptionStatus || "inactive"
+    const planLimits = SUBSCRIPTION_LIMITS[subscriptionTier]
+
+    // Format subscription tier for display
+    const formattedTier = subscriptionTier.charAt(0).toUpperCase() + subscriptionTier.slice(1)
+
+    // Format subscription status for display
+    const getStatusDisplay = (status: string) => {
+        switch (status) {
+            case "active": return { text: "Active", color: "text-green-600" };
+            case "trialing": return { text: "Trial", color: "text-blue-600" };
+            case "past_due": return { text: "Past Due", color: "text-amber-600" };
+            case "canceled": return { text: "Canceled", color: "text-red-600" };
+            default: return { text: "Inactive", color: "text-gray-600" };
+        }
+    }
+
+    const statusDisplay = getStatusDisplay(subscriptionStatus)
 
     return (
         <div className="container py-10">
@@ -128,11 +152,11 @@ export default function SettingsPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <Label htmlFor="firstName">First Name</Label>
-                                        <Input id="firstName" defaultValue={user?.firstName || ""} />
+                                        <Input id="firstName" defaultValue={clerkUser?.firstName || ""} />
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="lastName">Last Name</Label>
-                                        <Input id="lastName" defaultValue={user?.lastName || ""} />
+                                        <Input id="lastName" defaultValue={clerkUser?.lastName || ""} />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
@@ -140,7 +164,7 @@ export default function SettingsPage() {
                                     <Input
                                         id="email"
                                         type="email"
-                                        defaultValue={user?.primaryEmailAddress?.emailAddress || ""}
+                                        defaultValue={clerkUser?.primaryEmailAddress?.emailAddress || ""}
                                         disabled
                                     />
                                     <p className="text-sm text-muted-foreground">Your email address is verified and cannot be changed.</p>
@@ -164,17 +188,66 @@ export default function SettingsPage() {
                                     <div className="flex justify-between items-center">
                                         <div>
                                             <h3 className="font-medium">Current Plan</h3>
-                                            <p className="text-sm text-muted-foreground">Free Plan</p>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-lg font-semibold">{formattedTier} Plan</span>
+                                                <span className={`text-sm ${statusDisplay.color} px-2 py-0.5 rounded-full bg-opacity-10 bg-current`}>
+                                                    {statusDisplay.text}
+                                                </span>
+                                            </div>
                                         </div>
                                         <Link href="/pricing">
-                                            <Button>Upgrade</Button>
+                                            <Button>{subscriptionTier === "family" ? "Manage" : "Upgrade"}</Button>
                                         </Link>
                                     </div>
                                 </div>
+
+                                <div className="rounded-lg border p-4">
+                                    <h3 className="font-medium mb-3">Plan Features</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-green-500" />
+                                            <span className="text-sm">
+                                                {planLimits.maxFamilies === Infinity
+                                                    ? "Unlimited family trees"
+                                                    : `Up to ${planLimits.maxFamilies} family tree${planLimits.maxFamilies !== 1 ? 's' : ''}`}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-green-500" />
+                                            <span className="text-sm">
+                                                {planLimits.maxFamilyMembers === Infinity
+                                                    ? "Unlimited family members"
+                                                    : `Up to ${planLimits.maxFamilyMembers} family members per tree`}
+                                            </span>
+                                        </div>
+                                        {Object.entries(planLimits.features).map(([feature, isIncluded]) => (
+                                            <div key={feature} className="flex items-center gap-2">
+                                                {isIncluded ? (
+                                                    <Check className="h-4 w-4 text-green-500" />
+                                                ) : (
+                                                    <span className="h-4 w-4 flex items-center justify-center text-gray-300">-</span>
+                                                )}
+                                                <span className={`text-sm ${!isIncluded ? 'text-gray-400' : ''}`}>
+                                                    {feature
+                                                        .replace(/([A-Z])/g, ' $1')
+                                                        .replace(/^./, str => str.toUpperCase())
+                                                        .replace(/([a-z])([A-Z])/g, '$1 $2')}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
                                 <div className="rounded-lg border p-4">
                                     <h3 className="font-medium mb-2">Payment Methods</h3>
                                     <p className="text-sm text-muted-foreground mb-4">No payment methods added yet.</p>
                                     <Button variant="outline">Add Payment Method</Button>
+                                </div>
+
+                                <div className="rounded-lg border p-4">
+                                    <h3 className="font-medium mb-2">Billing History</h3>
+                                    <p className="text-sm text-muted-foreground mb-4">No billing history available.</p>
+                                    <Button variant="outline">View Invoices</Button>
                                 </div>
                             </CardContent>
                         </Card>

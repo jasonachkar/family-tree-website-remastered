@@ -22,6 +22,9 @@ import {
   DialogFooter,
   DialogClose
 } from "@/components/ui/dialog"
+import { useAuth } from '@/contexts/AuthContext'
+import { canAddFamilyMember, getLimitMessage, logSubscriptionLimits, getUserLimit } from '@/utils/subscriptionLimits'
+import Link from 'next/link'
 
 interface FamilyTreeCanvasProps {
   familyId: string
@@ -30,6 +33,7 @@ interface FamilyTreeCanvasProps {
 export default function FamilyTreeCanvas({ familyId }: FamilyTreeCanvasProps) {
   const { toast } = useToast()
   const { loadFamilyTreeFromKV, saveFamilyTreeToKV } = useFamilyContext()
+  const { user } = useAuth()
   const [treeData, setTreeData] = useState<FamilyMember | null>(null)
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [relations, setRelations] = useState<{ from: string, to: string, type: 'parent' | 'spouse' }[]>([])
@@ -46,19 +50,60 @@ export default function FamilyTreeCanvas({ familyId }: FamilyTreeCanvasProps) {
   const [zoomLevel, setZoomLevel] = useState(1)
   const [canvasPosition, setCanvasPosition] = useState({ x: 0, y: 0 })
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false)
-  const [autoLayout, setAutoLayout] = useState(false)
+  const [autoLayout, setAutoLayout] = useState(true)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+
+  // Helper function to flatten the family tree for rendering
+  const flattenFamilyTree = (root: FamilyMember): FamilyMember[] => {
+    if (!root) return [];
+
+    const result: FamilyMember[] = [root];
+
+    if (root.children && root.children.length > 0) {
+      for (const child of root.children) {
+        if (child) {
+          result.push(...flattenFamilyTree(child));
+        }
+      }
+    }
+
+    if (root.spouses && root.spouses.length > 0) {
+      for (const spouse of root.spouses) {
+        if (spouse) {
+          result.push(spouse);
+        }
+      }
+    }
+
+    // Log the flattened tree size for debugging
+    console.log(`Flattened tree size: ${result.length} members`);
+
+    return result;
+  }
 
   // Load family tree data
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Log subscription limits for debugging
+        logSubscriptionLimits();
+
         setIsLoading(true)
         const data = await loadFamilyTreeFromKV(familyId)
         if (data) {
           setTreeData(data)
           const flattenedMembers = flattenFamilyTree(data)
           setMembers(flattenedMembers)
+
+          // Log the initial member count for debugging
+          console.log(`Initial family member count: ${flattenedMembers.length}`);
+
+          // Log the current user's family member limit
+          if (user) {
+            const memberLimit = getUserLimit(user.subscriptionTier, 'maxFamilyMembers');
+            console.log(`User subscription tier: ${user.subscriptionTier}, member limit: ${memberLimit}, remaining: ${memberLimit - flattenedMembers.length}`);
+          }
+
           const extractedRelations = extractRelations(data)
           setRelations(extractedRelations)
         } else {
@@ -76,6 +121,9 @@ export default function FamilyTreeCanvas({ familyId }: FamilyTreeCanvasProps) {
           }
           setTreeData(rootPerson)
           setMembers([rootPerson])
+
+          // Log the initial member count for debugging (new tree)
+          console.log(`New tree created with 1 member`);
         }
       } catch (error) {
         console.error('Error loading family tree:', error)
@@ -89,26 +137,7 @@ export default function FamilyTreeCanvas({ familyId }: FamilyTreeCanvasProps) {
     }
 
     loadData()
-  }, [familyId, loadFamilyTreeFromKV, toast])
-
-  // Helper function to flatten the family tree for rendering
-  const flattenFamilyTree = (root: FamilyMember): FamilyMember[] => {
-    const result: FamilyMember[] = [root]
-
-    if (root.children) {
-      for (const child of root.children) {
-        result.push(...flattenFamilyTree(child))
-      }
-    }
-
-    if (root.spouses) {
-      for (const spouse of root.spouses) {
-        result.push(spouse)
-      }
-    }
-
-    return result
-  }
+  }, [familyId, loadFamilyTreeFromKV, toast, user])
 
   // Helper function to extract all relationships from the tree
   const extractRelations = (root: FamilyMember): { from: string, to: string, type: 'parent' | 'spouse' }[] => {
@@ -304,9 +333,29 @@ export default function FamilyTreeCanvas({ familyId }: FamilyTreeCanvasProps) {
   const handleAddMember = () => {
     if (!selectedMember) {
       toast({
-        title: 'Select a Member',
-        description: 'Please select a family member to add a relationship',
+        title: "No Member Selected",
+        description: "Please select a family member first to add a child or spouse."
       })
+      return
+    }
+
+    // Get the correct count of family members
+    const memberCount = members ? members.length : 0;
+
+    // Check subscription limits
+    if (user && !canAddFamilyMember(user.subscriptionTier, memberCount)) {
+      toast({
+        title: "Subscription Limit Reached",
+        description: getLimitMessage(user.subscriptionTier, 'member')
+      })
+
+      setTimeout(() => {
+        // Show upgrade link if limit reached
+        toast({
+          title: "Upgrade your plan",
+          description: "Visit our pricing page to upgrade your subscription and add more family members."
+        })
+      }, 1000)
       return
     }
 

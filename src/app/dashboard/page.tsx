@@ -260,12 +260,12 @@ export default function DashboardPage() {
                 size="sm"
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="text-gray-600 hover:text-blue-600"
+                className="text-gray-600 hover:text-indigo-600"
               >
                 <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
                 {isRefreshing ? 'Refreshing...' : 'Refresh'}
               </Button>
-              <Link href="/families" className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center">
+              <Link href="/families" className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center">
                 View All
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Link>
@@ -326,7 +326,7 @@ export default function DashboardPage() {
             <Card className="hover:shadow-sm transition-shadow border border-gray-100">
               <div className="p-6 space-y-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <Users className="h-5 w-5 text-blue-600" />
+                  <Users className="h-5 w-5 text-indigo-600" />
                   <h3 className="text-lg font-semibold">Add Family Member</h3>
                 </div>
                 <p className="text-gray-500 text-sm">
@@ -374,7 +374,7 @@ export default function DashboardPage() {
                           <Button
                             onClick={handleAddMember}
                             disabled={!selectedFamilyForMember}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
                           >
                             Continue
                           </Button>
@@ -389,7 +389,7 @@ export default function DashboardPage() {
             <Card className="hover:shadow-sm transition-shadow border border-gray-100">
               <div className="p-6 space-y-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <Clock className="h-5 w-5 text-blue-600" />
+                  <Clock className="h-5 w-5 text-indigo-600" />
                   <h3 className="text-lg font-semibold">Record Family Story</h3>
                 </div>
                 <p className="text-gray-500 text-sm">
@@ -437,7 +437,7 @@ export default function DashboardPage() {
                           <Button
                             onClick={handleAddStory}
                             disabled={!selectedFamilyForStory}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
                           >
                             Continue
                           </Button>
@@ -452,7 +452,7 @@ export default function DashboardPage() {
             <Card className="hover:shadow-sm transition-shadow border border-gray-100">
               <div className="p-6 space-y-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <Settings className="h-5 w-5 text-blue-600" />
+                  <Settings className="h-5 w-5 text-indigo-600" />
                   <h3 className="text-lg font-semibold">Account Settings</h3>
                 </div>
                 <p className="text-gray-500 text-sm">
@@ -485,7 +485,7 @@ export default function DashboardPage() {
                     <p className="text-sm text-gray-500">Basic features for individuals</p>
                   </div>
                   <Link href="/pricing" passHref>
-                    <Button className="bg-blue-600 hover:bg-blue-700">Upgrade</Button>
+                    <Button className="bg-indigo-600 hover:bg-indigo-700">Upgrade</Button>
                   </Link>
                 </div>
 
@@ -501,7 +501,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
-                          className="bg-blue-600 h-2 rounded-full"
+                          className="bg-indigo-600 h-2 rounded-full"
                           style={{
                             width: `${Math.min(userFamiliesCount / 1 * 100, 100)}%`
                           }}
@@ -518,7 +518,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
-                          className="bg-blue-600 h-2 rounded-full"
+                          className="bg-indigo-600 h-2 rounded-full"
                           style={{
                             width: `${Math.min(totalMemberCount / 50 * 100, 100)}%`
                           }}

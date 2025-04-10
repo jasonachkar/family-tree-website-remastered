@@ -16,6 +16,7 @@ import { ExportedData } from '@/utils/jsonOperations'
 import { useToast } from "@/components/ui/use-toast"
 import SplashScreen from '@/components/SplashScreen'
 import { use } from 'react'
+import { hasFeatureAccess, getLimitMessage } from '@/utils/subscriptionLimits'
 import {
   Book,
   Search,
@@ -25,13 +26,20 @@ import {
   Clock,
   RefreshCw,
   Filter,
-  CalendarRange
+  CalendarRange,
+  Lock
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDistanceToNow } from 'date-fns'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export default function FamilyLorePage({ params }: { params: Promise<{ id: string }> }) {
   // Unwrap params promise
@@ -51,6 +59,9 @@ export default function FamilyLorePage({ params }: { params: Promise<{ id: strin
   const [sortOption, setSortOption] = useState("newest")
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedPerson, setSelectedPerson] = useState<string | null>("all")
+
+  // Check if user has stories feature access
+  const canUseStories = user ? hasFeatureAccess(user.subscriptionTier, 'familyStories') : false
 
   useEffect(() => {
     const loadData = async () => {
@@ -154,6 +165,22 @@ export default function FamilyLorePage({ params }: { params: Promise<{ id: strin
   }
 
   const handleAddStory = async (newStory: { title: string; content: string; relatedPeople: string[] }) => {
+    // If user doesn't have stories access, show upgrade toast
+    if (!canUseStories) {
+      toast({
+        title: "Feature Restricted",
+        description: getLimitMessage(user?.subscriptionTier || 'free', 'stories')
+      })
+
+      setTimeout(() => {
+        toast({
+          title: "Upgrade Required",
+          description: "Visit our pricing page to upgrade your subscription."
+        })
+      }, 1000)
+      return
+    }
+
     try {
       const story: Story = {
         id: `story-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -361,7 +388,8 @@ export default function FamilyLorePage({ params }: { params: Promise<{ id: strin
                 {isRefreshing ? 'Refreshing...' : 'Refresh'}
               </Button>
 
-              {user?.isAdmin && (
+              {/* Conditional rendering based on feature access */}
+              {canUseStories ? (
                 <Button
                   onClick={() => setIsAddStoryModalOpen(true)}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white"
@@ -369,8 +397,31 @@ export default function FamilyLorePage({ params }: { params: Promise<{ id: strin
                   <Plus className="h-4 w-4 mr-2" />
                   Add Story
                 </Button>
+              ) : (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={() => {
+                          toast({
+                            title: "Feature Restricted",
+                            description: getLimitMessage(user?.subscriptionTier || 'free', 'stories')
+                          });
+                        }}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-600"
+                      >
+                        <Lock className="h-4 w-4 mr-2" />
+                        Add Story
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Upgrade to Premium or Family plan to access family stories</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
 
+              {/* Only show DataManagement if user is admin */}
               {user?.isAdmin && (
                 <DataManagement
                   onImport={handleImport}
@@ -432,7 +483,20 @@ export default function FamilyLorePage({ params }: { params: Promise<{ id: strin
         </Card>
 
         {/* Stories grid */}
-        {filteredStories.length > 0 ? (
+        {!canUseStories ? (
+          <div className="flex flex-col items-center justify-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
+            <Book className="h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-1">Family Stories Locked</h3>
+            <p className="text-gray-500 mb-6 text-center max-w-md">
+              Family stories are available with Premium and Family plans.
+            </p>
+            <Link href="/pricing">
+              <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                Upgrade Your Plan
+              </Button>
+            </Link>
+          </div>
+        ) : filteredStories.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <AnimatePresence>
               {filteredStories.map((story, index) => (
@@ -477,7 +541,7 @@ export default function FamilyLorePage({ params }: { params: Promise<{ id: strin
           </div>
         )}
 
-        {isAddStoryModalOpen && (
+        {isAddStoryModalOpen && canUseStories && (
           <AddStoryModal
             familyId={id}
             people={familyPeople}

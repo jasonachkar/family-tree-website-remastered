@@ -10,18 +10,37 @@ import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import { uploadImageToBlob } from '@/utils/blobStorage'
+import { useAuth } from '@/contexts/AuthContext'
+import { canCreateFamily, getLimitMessage } from '@/utils/subscriptionLimits'
+import Link from 'next/link'
 
 export default function CreateFamilyDialog() {
     const [isOpen, setIsOpen] = useState(false)
     const [name, setName] = useState('')
     const [image, setImage] = useState('')
     const [isLoading, setIsLoading] = useState(false)
-    const { addFamily, saveFamilyTreeToKV } = useFamilyContext()
+    const { addFamily, saveFamilyTreeToKV, families } = useFamilyContext()
+    const { user } = useAuth()
     const { toast } = useToast()
     const router = useRouter()
 
+    // Count families that this user owns (not shared with them)
+    const userOwnedFamilies = user ? families.filter(family => family.ownerId === user.id) : []
+    const canCreate = user ? canCreateFamily(user.subscriptionTier, userOwnedFamilies.length) : false
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        // Check subscription limits
+        if (!canCreate) {
+            toast({
+                title: "Subscription Limit Reached",
+                description: getLimitMessage(user?.subscriptionTier || 'free', 'family'),
+                variant: "destructive"
+            })
+            return
+        }
+
         setIsLoading(true)
         try {
             // Upload image to Blob if provided
@@ -99,13 +118,42 @@ export default function CreateFamilyDialog() {
         }
     }
 
+    const handleClick = () => {
+        if (!canCreate) {
+            toast({
+                title: "Subscription Limit Reached",
+                description: getLimitMessage(user?.subscriptionTier || 'free', 'family'),
+                variant: "destructive"
+            })
+        }
+    }
+
     return (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => canCreate ? setIsOpen(open) : null}>
             <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600">
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Family Tree
-                </Button>
+                <div>
+                    {canCreate ? (
+                        <Button
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                        >
+                            <Plus className="mr-2 h-4 w-4" />
+                            New Family Tree
+                        </Button>
+                    ) : (
+                        <div className="flex flex-col gap-2">
+                            <Button
+                                onClick={handleClick}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                            >
+                                <Plus className="mr-2 h-4 w-4" />
+                                New Family Tree
+                            </Button>
+                            <Link href="/pricing" className="text-xs text-indigo-600 hover:text-indigo-800">
+                                Upgrade your plan to create more family trees
+                            </Link>
+                        </div>
+                    )}
+                </div>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
@@ -134,7 +182,7 @@ export default function CreateFamilyDialog() {
                     </div>
                     <Button
                         type="submit"
-                        className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
                         disabled={isLoading}
                     >
                         {isLoading ? "Creating..." : "Create Family"}
